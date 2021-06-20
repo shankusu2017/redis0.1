@@ -282,6 +282,7 @@ static int cliSendCommand(int argc, char **argv) {
     return 0;
 }
 
+/* 解析 ip:port */
 static int parseOptions(int argc, char **argv) {
     int i;
 

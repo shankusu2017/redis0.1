@@ -34,6 +34,7 @@
 void *zmalloc(size_t size);
 void *zrealloc(void *ptr, size_t size);
 void zfree(void *ptr);
+/* 拷贝一份全新的string到崭新的内存块并返回 */
 char *zstrdup(const char *s);
 size_t zmalloc_used_memory(void);
 

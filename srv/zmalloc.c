@@ -33,6 +33,7 @@
 
 static size_t used_memory = 0;
 
+/* 申请内存, 自带size.head */
 void *zmalloc(size_t size) {
     void *ptr = malloc(size+sizeof(size_t));
 
@@ -42,23 +43,27 @@ void *zmalloc(size_t size) {
     return (char*)ptr+sizeof(size_t);
 }
 
+/* 调整已申请的内存块 */
 void *zrealloc(void *ptr, size_t size) {
     void *realptr;
     size_t oldsize;
     void *newptr;
 
-    if (ptr == NULL) return zmalloc(size);
+    if (ptr == NULL) return zmalloc(size);	/* 申请崭新的MEM */
+	
     realptr = (char*)ptr-sizeof(size_t);
     oldsize = *((size_t*)realptr);
     newptr = realloc(realptr,size+sizeof(size_t));
-    if (!newptr) return NULL;
+    if (!newptr) return NULL;				/* 调整失败则直接返回NULL */
 
     *((size_t*)newptr) = size;
+	/* 更新内存使用量 */
     used_memory -= oldsize;
     used_memory += size;
-    return (char*)newptr+sizeof(size_t);
+    return (char*)newptr+sizeof(size_t);	/* 返回 */
 }
 
+/* 释放内存 */
 void zfree(void *ptr) {
     void *realptr;
     size_t oldsize;
@@ -70,6 +75,7 @@ void zfree(void *ptr) {
     free(realptr);
 }
 
+/* 申请全新的内存，将s指向的string拷贝到新内存中并返回 */
 char *zstrdup(const char *s) {
     size_t l = strlen(s)+1;
     char *p = zmalloc(l);
@@ -78,6 +84,7 @@ char *zstrdup(const char *s) {
     return p;
 }
 
+/* 返回已消耗的内存总量 */
 size_t zmalloc_used_memory(void) {
     return used_memory;
 }
