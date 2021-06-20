@@ -45,6 +45,7 @@
 
 #include "anet.h"
 
+/* 参数设置错误打印 */
 static void anetSetError(char *err, const char *fmt, ...)
 {
     va_list ap;
@@ -55,6 +56,7 @@ static void anetSetError(char *err, const char *fmt, ...)
     va_end(ap);
 }
 
+/* 设置fd的NONBLOCK标志为1 */
 int anetNonBlock(char *err, int fd)
 {
     int flags;
@@ -73,6 +75,7 @@ int anetNonBlock(char *err, int fd)
     return ANET_OK;
 }
 
+/* 设置fd的NODELAY标志为1 */
 int anetTcpNoDelay(char *err, int fd)
 {
     int yes = 1;
@@ -84,6 +87,8 @@ int anetTcpNoDelay(char *err, int fd)
     return ANET_OK;
 }
 
+
+/* 更新发送缓冲区大小 */
 int anetSetSendBuffer(char *err, int fd, int buffsize)
 {
     if (setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &buffsize, sizeof(buffsize)) == -1)
@@ -94,6 +99,7 @@ int anetSetSendBuffer(char *err, int fd, int buffsize)
     return ANET_OK;
 }
 
+/* 设置fd的KEEPALIVE标志位为1 */
 int anetTcpKeepAlive(char *err, int fd)
 {
     int yes = 1;
@@ -104,6 +110,7 @@ int anetTcpKeepAlive(char *err, int fd)
     return ANET_OK;
 }
 
+/* 如果输入的是域名eg: redis.io则尝试将其转为IP地址 */
 int anetResolve(char *err, char *host, char *ipbuf)
 {
     struct sockaddr_in sa;
@@ -125,11 +132,14 @@ int anetResolve(char *err, char *host, char *ipbuf)
 
 #define ANET_CONNECT_NONE 0
 #define ANET_CONNECT_NONBLOCK 1
+
+/* 带flags的TCP主动发起链接的接口 */
 static int anetTcpGenericConnect(char *err, char *addr, int port, int flags)
 {
     int s, on = 1;
     struct sockaddr_in sa;
 
+	/* 申请一个对应的句柄 */
     if ((s = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
         anetSetError(err, "creating socket: %s\n", strerror(errno));
         return ANET_ERR;
@@ -140,22 +150,29 @@ static int anetTcpGenericConnect(char *err, char *addr, int port, int flags)
 
     sa.sin_family = AF_INET;
     sa.sin_port = htons(port);
-    if (inet_aton(addr, &sa.sin_addr) == 0) {
+	
+	/* hostname->ip.addr */
+    if (inet_aton(addr, &sa.sin_addr) == 0) {	/* 输入的是域名(redis.io) */
         struct hostent *he;
 
-        he = gethostbyname(addr);
+        he = gethostbyname(addr);	/* 通过dns将域名转换为主机信息(IP地址等...) */
         if (he == NULL) {
             anetSetError(err, "can't resolve: %s\n", addr);
             close(s);
             return ANET_ERR;
         }
-        memcpy(&sa.sin_addr, he->h_addr, sizeof(struct in_addr));
+        memcpy(&sa.sin_addr, he->h_addr, sizeof(struct in_addr));	/* 拷贝IP地址(45.60.123.1) */
     }
+
+	/* 处理 NONBLOCK 标志位 */
     if (flags & ANET_CONNECT_NONBLOCK) {
-        if (anetNonBlock(err,s) != ANET_OK)
+        if (anetNonBlock(err,s) != ANET_OK)	/* 这里没有像上面那样关闭s */
             return ANET_ERR;
     }
+
+	/* 正式发起IP链接 */
     if (connect(s, (struct sockaddr*)&sa, sizeof(sa)) == -1) {
+		/* 这种情况下算成功, ps:errno是线程安全的 */
         if (errno == EINPROGRESS &&
             flags & ANET_CONNECT_NONBLOCK)
             return s;
@@ -167,11 +184,13 @@ static int anetTcpGenericConnect(char *err, char *addr, int port, int flags)
     return s;
 }
 
+/* 通用的TCP链接发起接口 */
 int anetTcpConnect(char *err, char *addr, int port)
 {
     return anetTcpGenericConnect(err,addr,port,ANET_CONNECT_NONE);
 }
 
+/* nonblock的TCP链接发起接口 */
 int anetTcpNonBlockConnect(char *err, char *addr, int port)
 {
     return anetTcpGenericConnect(err,addr,port,ANET_CONNECT_NONBLOCK);
@@ -184,8 +203,14 @@ int anetRead(int fd, char *buf, int count)
     int nread, totlen = 0;
     while(totlen != count) {
         nread = read(fd,buf,count-totlen);
+		
+		/* srv端已关闭整个链接句柄或半关闭了WRITE端:EOF*/
         if (nread == 0) return totlen;
+		
+		/* 接口错误，直接返回 */
         if (nread == -1) return -1;
+		
+		/* 读到了部分数据，接着继续读，直到读到了count个数据为止 */
         totlen += nread;
         buf += nread;
     }
@@ -207,6 +232,7 @@ int anetWrite(int fd, char *buf, int count)
     return totlen;
 }
 
+/* 绑定到port端口,开始正式监听 */
 int anetTcpServer(char *err, int port, char *bindaddr)
 {
     int s, on = 1;
@@ -245,6 +271,7 @@ int anetTcpServer(char *err, int port, char *bindaddr)
     return s;
 }
 
+/* 接受单个链接后，返回(对方的ip,port被填入到输入指针中) */
 int anetAccept(char *err, int serversock, char *ip, int *port)
 {
     int fd;
@@ -255,7 +282,7 @@ int anetAccept(char *err, int serversock, char *ip, int *port)
         saLen = sizeof(sa);
         fd = accept(serversock, (struct sockaddr*)&sa, &saLen);
         if (fd == -1) {
-            if (errno == EINTR)
+            if (errno == EINTR)	/* 忽略慢中断 */
                 continue;
             else {
                 anetSetError(err, "accept: %s\n", strerror(errno));

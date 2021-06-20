@@ -28,6 +28,10 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+/*
+** redis.cli 客户端程序代码，不是服务器代码中处理客户端数据的代码哦(?)
+*/
+
 #include "fmacros.h"
 
 #include <stdio.h>
@@ -45,9 +49,10 @@
 
 #define REDIS_NOTUSED(V) ((void) V)
 
+/* redis.srv 网络配置 */
 static struct config {
-    char *hostip;
-    int hostport;
+    char *hostip;	/* ip */
+    int hostport;	/* 监听端口 */
 } config;
 
 struct redisCommand {
@@ -116,13 +121,14 @@ static struct redisCommand cmdTable[] = {
 
 static int cliReadReply(int fd);
 
+/* 根据name查找对应命令的配置信息 */
 static struct redisCommand *lookupCommand(char *name) {
     int j = 0;
     while(cmdTable[j].name != NULL) {
         if (!strcasecmp(name,cmdTable[j].name)) return &cmdTable[j];
         j++;
     }
-    return NULL;
+    return NULL;	/* 找不到对应的配置，用户输入的命令有误 */
 }
 
 static int cliConnect(void) {

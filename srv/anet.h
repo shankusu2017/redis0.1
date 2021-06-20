@@ -28,6 +28,10 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+/*
+** socket接口相关的函数
+*/
+
 #ifndef ANET_H
 #define ANET_H
 
