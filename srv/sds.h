@@ -35,14 +35,22 @@
 
 typedef char *sds;
 
+/* context : str = "hello"
+** len  = 5
+** free = 5
+** 整个byte.space=5+1+5   自动多一个字节出来用于保存'\0'
+*/
 struct sdshdr {
     long len;
-    long free;
-    char buf[];
+    long free;	/* 空间预分配，惰性释放 */
+    char buf[]; /* 字节空间的首地址 */
 };
 
+/* 构建指定长度的sds */
 sds sdsnewlen(const void *init, size_t initlen);
+/* */
 sds sdsnew(const char *init);
+/* 构建一个"空字符串"的sds */
 sds sdsempty();
 size_t sdslen(const sds s);
 sds sdsdup(const sds s);

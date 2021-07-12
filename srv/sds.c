@@ -41,22 +41,31 @@ static void sdsOomAbort(void) {
     abort();
 }
 
+/* 
+** KEYCODE 按照指定的字符串长度申请一个sds
+** 
+** 不会预留多余的free
+** NOTE: initlen可以为0
+*/
 sds sdsnewlen(const void *init, size_t initlen) {
     struct sdshdr *sh;
 
-    sh = zmalloc(sizeof(struct sdshdr)+initlen+1);
+	/* 看到这里的内存布局了么？不明白的，看下面的sdslen的实现 */
+    sh = zmalloc(sizeof(struct sdshdr)+initlen+1);	/* +1：自动在末位添加\0 */
 #ifdef SDS_ABORT_ON_OOM
     if (sh == NULL) sdsOomAbort();
 #else
     if (sh == NULL) return NULL;
 #endif
-    sh->len = initlen;
+    sh->len = initlen;	/* 这里不包含下面自动添加的\0,做到对调用层的透明 */
     sh->free = 0;
     if (initlen) {
-        if (init) memcpy(sh->buf, init, initlen);
-        else memset(sh->buf,0,initlen);
+        if (init) 
+			memcpy(sh->buf, init, initlen);
+        else 
+			memset(sh->buf,0,initlen);
     }
-    sh->buf[initlen] = '\0';
+    sh->buf[initlen] = '\0';	/* 自动添加\0 */
     return (char*)sh->buf;
 }
 
@@ -65,6 +74,7 @@ sds sdsempty(void) {
 }
 
 sds sdsnew(const char *init) {
+    /* strlen 不包含末尾的\0 */
     size_t initlen = (init == NULL) ? 0 : strlen(init);
     return sdsnewlen(init, initlen);
 }

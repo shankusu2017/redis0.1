@@ -33,7 +33,9 @@
 
 static size_t used_memory = 0;
 
-/* 申请内存, 自带size.head */
+/* 申请内存, 自带size.head
+** mem: size.head + free.mem
+*/
 void *zmalloc(size_t size) {
     void *ptr = malloc(size+sizeof(size_t));
 
