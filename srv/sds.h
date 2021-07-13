@@ -42,8 +42,8 @@ typedef char *sds;
 */
 struct sdshdr {
     long len;
-    long free;	/* 空间预分配，惰性释放 */
-    char buf[]; /* 字节空间的首地址 */
+    long free;		/* 空间预分配，惰性释放 */
+    char buf[]; 	/* 字节空间的首地址 */
 };
 
 /* 构建指定长度的sds */
@@ -52,15 +52,23 @@ sds sdsnewlen(const void *init, size_t initlen);
 sds sdsnew(const char *init);
 /* 构建一个"空字符串"的sds */
 sds sdsempty();
+/* 存储的数据长度(不包含自动添加的\0) */
 size_t sdslen(const sds s);
+/* 复制一份sds */
 sds sdsdup(const sds s);
+/* 释放sds */
 void sdsfree(sds s);
+/* 剩余的free空间大小 */
 size_t sdsavail(sds s);
+/* 将指定长度的数据t,len拷贝到s的尾处 */
 sds sdscatlen(sds s, void *t, size_t len);
 sds sdscat(sds s, char *t);
+/* 放弃s原来的数据，将指定长度的数据拷贝到s的头处 */
 sds sdscpylen(sds s, char *t, size_t len);
 sds sdscpy(sds s, char *t);
+/* 将带有格式的数据拷贝到s的尾处 */
 sds sdscatprintf(sds s, const char *fmt, ...);
+/* 对s的两端进行修剪，移除cset中的内容 */
 sds sdstrim(sds s, const char *cset);
 sds sdsrange(sds s, long start, long end);
 void sdsupdatelen(sds s);

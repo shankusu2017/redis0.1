@@ -79,7 +79,9 @@ sds sdsnew(const char *init) {
     return sdsnewlen(init, initlen);
 }
 
+/* 存储的数据长度 */
 size_t sdslen(const sds s) {
+	/* 这里提取sdshdr的方法可以整理成一个宏定义 */
     struct sdshdr *sh = (void*) (s-(sizeof(struct sdshdr)));
     return sh->len;
 }
@@ -105,15 +107,17 @@ void sdsupdatelen(sds s) {
     sh->len = reallen;
 }
 
+/* 准备一个不短于addlen长度的free内存空间 */
 static sds sdsMakeRoomFor(sds s, size_t addlen) {
     struct sdshdr *sh, *newsh;
     size_t free = sdsavail(s);
     size_t len, newlen;
 
-    if (free >= addlen) return s;
+    if (free >= addlen) return s;	/* 剩余空间足够，无需另外申请空间，直接返回 */
+	
     len = sdslen(s);
     sh = (void*) (s-(sizeof(struct sdshdr)));
-    newlen = (len+addlen)*2;
+    newlen = (len+addlen)*2;	// 直接申请多一倍的冗余空间
     newsh = zrealloc(sh, sizeof(struct sdshdr)+newlen+1);
 #ifdef SDS_ABORT_ON_OOM
     if (newsh == NULL) sdsOomAbort();
@@ -125,17 +129,18 @@ static sds sdsMakeRoomFor(sds s, size_t addlen) {
     return newsh->buf;
 }
 
+/* 将指定长度len的内存空间tcat到s的尾上 */
 sds sdscatlen(sds s, void *t, size_t len) {
     struct sdshdr *sh;
     size_t curlen = sdslen(s);
 
-    s = sdsMakeRoomFor(s,len);
+    s = sdsMakeRoomFor(s,len);	/* 扩展free内存以便增加len */
     if (s == NULL) return NULL;
     sh = (void*) (s-(sizeof(struct sdshdr)));
     memcpy(s+curlen, t, len);
     sh->len = curlen+len;
     sh->free = sh->free-len;
-    s[curlen+len] = '\0';
+    s[curlen+len] = '\0';		/* 不忘自动添加一个\0 */
     return s;
 }
 
@@ -143,6 +148,9 @@ sds sdscat(sds s, char *t) {
     return sdscatlen(s, t, strlen(t));
 }
 
+/* 将指定长度的数据t,len复制到指定s的head开始处
+** 放弃原来s的数据
+*/
 sds sdscpylen(sds s, char *t, size_t len) {
     struct sdshdr *sh = (void*) (s-(sizeof(struct sdshdr)));
     size_t totlen = sh->free+sh->len;
@@ -176,13 +184,14 @@ sds sdscatprintf(sds s, const char *fmt, ...) {
 #else
         if (buf == NULL) return NULL;
 #endif
-        buf[buflen-2] = '\0';
+        buf[buflen-2] = '\0';	
         va_start(ap, fmt);
         vsnprintf(buf, buflen, fmt, ap);
         va_end(ap);
-        if (buf[buflen-2] != '\0') {
+		/* 这里buflen-2而不是buflen-1就有意思了吧 */
+        if (buf[buflen-2] != '\0') {	
             zfree(buf);
-            buflen *= 2;
+            buflen *= 2;	/* 长度不够，加长一倍,直到找到一个合适的长度 */
             continue;
         }
         break;
@@ -192,6 +201,10 @@ sds sdscatprintf(sds s, const char *fmt, ...) {
     return t;
 }
 
+/*
+**对 sds 左右两端进行修剪(trim)，清除其中 cset 指定的所有字符
+**比如 sdsstrim(xxyyabcyyxy, "xy") 将返回 "abc"
+*/
 sds sdstrim(sds s, const char *cset) {
     struct sdshdr *sh = (void*) (s-(sizeof(struct sdshdr)));
     char *start, *end, *sp, *ep;
@@ -199,10 +212,19 @@ sds sdstrim(sds s, const char *cset) {
 
     sp = start = s;
     ep = end = s+sdslen(s)-1;
-    while(sp <= end && strchr(cset, *sp)) sp++;
-    while(ep > start && strchr(cset, *ep)) ep--;
+	/* strchr函数功能为在一个串中查找给定字符的第一个匹配之处 */
+    while(sp <= end && strchr(cset, *sp)) 
+		sp++;
+    while(ep > start && strchr(cset, *ep))
+		ep--;
+	
+	/* sp>ep意味着整个sds都被裁剪掉了 */
     len = (sp > ep) ? 0 : ((ep-sp)+1);
-    if (sh->buf != sp) memmove(sh->buf, sp, len);
+	
+	/* 开头的这一部分需要被trim掉 */
+    if (sh->buf != sp) 
+	    memmove(sh->buf, sp, len);
+	
     sh->buf[len] = '\0';
     sh->free = sh->free+(sh->len-len);
     sh->len = len;
@@ -213,7 +235,10 @@ sds sdsrange(sds s, long start, long end) {
     struct sdshdr *sh = (void*) (s-(sizeof(struct sdshdr)));
     size_t newlen, len = sdslen(s);
 
+	/* 这个前置判断很有必要 */
     if (len == 0) return s;
+
+	/* 超过头了，纠正为数组头 */
     if (start < 0) {
         start = len+start;
         if (start < 0) start = 0;
@@ -222,10 +247,14 @@ sds sdsrange(sds s, long start, long end) {
         end = len+end;
         if (end < 0) end = 0;
     }
+	
     newlen = (start > end) ? 0 : (end-start)+1;
     if (newlen != 0) {
-        if (start >= (signed)len) start = len-1;
-        if (end >= (signed)len) end = len-1;
+		/* 超过尾了,纠正为数组尾 */
+        if (start >= (signed)len)
+			start = len-1;
+        if (end >= (signed)len)
+			end = len-1;
         newlen = (start > end) ? 0 : (end-start)+1;
     } else {
         start = 0;
