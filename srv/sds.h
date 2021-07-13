@@ -70,8 +70,10 @@ sds sdscpy(sds s, char *t);
 sds sdscatprintf(sds s, const char *fmt, ...);
 /* 对s的两端进行修剪，移除cset中的内容 */
 sds sdstrim(sds s, const char *cset);
+/* 截取原始的部分内容 */
 sds sdsrange(sds s, long start, long end);
 void sdsupdatelen(sds s);
+/* 比较两个s1,s2,当前仅当内容，长度相等才return.0 */
 int sdscmp(sds s1, sds s2);
 sds *sdssplitlen(char *s, int len, char *sep, int seplen, int *count);
 void sdstolower(sds s);

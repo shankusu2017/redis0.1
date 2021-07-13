@@ -266,18 +266,24 @@ sds sdsrange(sds s, long start, long end) {
     return s;
 }
 
+/* 将所有的大写字母转为小写 */
 void sdstolower(sds s) {
     int len = sdslen(s), j;
 
-    for (j = 0; j < len; j++) s[j] = tolower(s[j]);
+	/* 将大写字母转为小写(非大写则不处理) */
+    for (j = 0; j < len; j++) 
+		s[j] = tolower(s[j]);
 }
 
+/* 将所有的小写字母转为大写 */
 void sdstoupper(sds s) {
     int len = sdslen(s), j;
 
-    for (j = 0; j < len; j++) s[j] = toupper(s[j]);
+    for (j = 0; j < len; j++) 
+		s[j] = toupper(s[j]);
 }
 
+/* 比较两个s1,s2,当前仅当内容，长度相等才return.0                 */
 int sdscmp(sds s1, sds s2) {
     size_t l1, l2, minlen;
     int cmp;
@@ -286,7 +292,9 @@ int sdscmp(sds s1, sds s2) {
     l2 = sdslen(s2);
     minlen = (l1 < l2) ? l1 : l2;
     cmp = memcmp(s1,s2,minlen);
-    if (cmp == 0) return l1-l2;
+	/* 这个判断条件有意思哈 */
+    if (cmp == 0)
+		return l1-l2;
     return cmp;
 }
 
@@ -313,10 +321,15 @@ sds *sdssplitlen(char *s, int len, char *sep, int seplen, int *count) {
 #ifdef SDS_ABORT_ON_OOM
     if (tokens == NULL) sdsOomAbort();
 #endif
-    if (seplen < 1 || len < 0 || tokens == NULL) return NULL;
-    for (j = 0; j < (len-(seplen-1)); j++) {
+
+    /* 长度参数异常，返回NULL */
+    if (seplen < 1 || len < 0 || tokens == NULL) 
+		return NULL;	/* 这里还要释放上面申请的tokens的内存啊 */
+
+	/* 整个算法没问题，自己画图分解下所有可能的情况遍可确认 */
+    for (j = 0; j < (len-(seplen-1)); j++) {	
         /* make sure there is room for the next element and the final one */
-        if (slots < elements+2) {
+        if (slots < elements+2) {	/* 2==next+final*/
             sds *newtokens;
 
             slots *= 2;
@@ -330,9 +343,10 @@ sds *sdssplitlen(char *s, int len, char *sep, int seplen, int *count) {
             }
             tokens = newtokens;
         }
+		
         /* search the separator */
         if ((seplen == 1 && *(s+j) == sep[0]) || (memcmp(s+j,sep,seplen) == 0)) {
-            tokens[elements] = sdsnewlen(s+start,j-start);
+            tokens[elements] = sdsn ewlen(s+start,j-start);
             if (tokens[elements] == NULL) {
 #ifdef SDS_ABORT_ON_OOM
                 sdsOomAbort();
@@ -345,6 +359,7 @@ sds *sdssplitlen(char *s, int len, char *sep, int seplen, int *count) {
             j = j+seplen-1; /* skip the separator */
         }
     }
+	
     /* Add the final element. We are sure there is room in the tokens array. */
     tokens[elements] = sdsnewlen(s+start,len-start);
     if (tokens[elements] == NULL) {
@@ -362,7 +377,8 @@ sds *sdssplitlen(char *s, int len, char *sep, int seplen, int *count) {
 cleanup:
     {
         int i;
-        for (i = 0; i < elements; i++) sdsfree(tokens[i]);
+        for (i = 0; i < elements; i++) 
+			sdsfree(tokens[i]);
         zfree(tokens);
         return NULL;
     }
