@@ -85,6 +85,7 @@ void listReleaseIterator(listIter *iter);
 
 list *listDup(list *orig);
 listNode *listSearchKey(list *list, void *key);
+/* 0:head, -1:tail */
 listNode *listIndex(list *list, int index);
 /* rewind:倒带 */
 void listRewind(list *list);

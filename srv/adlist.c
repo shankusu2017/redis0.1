@@ -252,8 +252,9 @@ list *listDup(list *orig)
                 listReleaseIterator(iter);
                 return NULL;
             }
-        } else
+        } else {
             value = node->value;
+        }	
 		/* 从头往后插入 和AL_START_HEAD相匹配 */
         if (listAddNodeTail(copy, value) == NULL) {
             listRelease(copy);
