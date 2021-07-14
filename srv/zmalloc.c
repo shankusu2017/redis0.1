@@ -37,6 +37,8 @@ static size_t used_memory = 0;
 ** mem: size.head + free.mem
 */
 void *zmalloc(size_t size) {
+	/* The  malloc()  function  allocates  size bytes and returns a pointer to the allocated memory.  
+	 * The memory is not initialized */
     void *ptr = malloc(size+sizeof(size_t));
 
     if (!ptr) return NULL;

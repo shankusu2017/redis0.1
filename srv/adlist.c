@@ -42,13 +42,16 @@ list *listCreate(void)
 {
     struct list *list;
 
+	/* 这里为何不直接 sizeof(list)呢? */
     if ((list = zmalloc(sizeof(*list))) == NULL)
         return NULL;
+	/* 初始化 */
     list->head = list->tail = NULL;
     list->len = 0;
     list->dup = NULL;
     list->free = NULL;
     list->match = NULL;
+	/* NOTE: 迭代器没有进行初始化处理 */
     return list;
 }
 
@@ -64,7 +67,8 @@ void listRelease(list *list)
     len = list->len;
     while(len--) {
         next = current->next;
-        if (list->free) list->free(current->value);
+        if (list->free) /* 这里调用专用free函数进行释放操作 */
+			list->free(current->value);
         zfree(current);
         current = next;
     }
@@ -83,8 +87,11 @@ list *listAddNodeHead(list *list, void *value)
 
     if ((node = zmalloc(sizeof(*node))) == NULL)
         return NULL;
+	/* 设置负载 */
     node->value = value;
-    if (list->len == 0) {
+
+	/* 插入链表 */
+    if (list->len == 0) {	/* 这种边界值必须考虑到 */
         list->head = list->tail = node;
         node->prev = node->next = NULL;
     } else {
@@ -109,7 +116,9 @@ list *listAddNodeTail(list *list, void *value)
 
     if ((node = zmalloc(sizeof(*node))) == NULL)
         return NULL;
+	/* 设置负载值 */
     node->value = value;
+	/* 插入到tail */
     if (list->len == 0) {
         list->head = list->tail = node;
         node->prev = node->next = NULL;
@@ -129,6 +138,7 @@ list *listAddNodeTail(list *list, void *value)
  * This function can't fail. */
 void listDelNode(list *list, listNode *node)
 {
+	/* 画图，很容易理解 */
     if (node->prev)
         node->prev->next = node->next;
     else
@@ -137,7 +147,9 @@ void listDelNode(list *list, listNode *node)
         node->next->prev = node->prev;
     else
         list->tail = node->prev;
-    if (list->free) list->free(node->value);
+	
+    if (list->free) 
+		list->free(node->value);
     zfree(node);
     list->len--;
 }
@@ -187,7 +199,9 @@ void listRewindTail(list *list) {
  * while ((node = listNextIterator(iter)) != NULL) {
  *     DoSomethingWith(listNodeValue(node));
  * }
+*
  *
+ * 迭代器已经指向了下一个node,故而这里可以删除返回的node
  * */
 listNode *listNext(listIter *iter)
 {
@@ -202,7 +216,8 @@ listNode *listNext(listIter *iter)
     return current;
 }
 
-/* List Yield just call listNext() against the list private iterator */
+/* List Yield just call listNext() against the list private iterator 
+ * 调用此方法前，必须调用RewindXXX系列中的一个，以便初始化list.iter */
 listNode *listYield(list *list) {
     return listNext(&list->iter);
 }
@@ -229,7 +244,7 @@ list *listDup(list *orig)
     iter = listGetIterator(orig, AL_START_HEAD);
     while((node = listNext(iter)) != NULL) {
         void *value;
-
+		/* 拷贝原值 */
         if (copy->dup) {
             value = copy->dup(node->value);
             if (value == NULL) {
@@ -239,6 +254,7 @@ list *listDup(list *orig)
             }
         } else
             value = node->value;
+		/* 从头往后插入 和AL_START_HEAD相匹配 */
         if (listAddNodeTail(copy, value) == NULL) {
             listRelease(copy);
             listReleaseIterator(iter);

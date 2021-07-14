@@ -346,7 +346,7 @@ sds *sdssplitlen(char *s, int len, char *sep, int seplen, int *count) {
 		
         /* search the separator */
         if ((seplen == 1 && *(s+j) == sep[0]) || (memcmp(s+j,sep,seplen) == 0)) {
-            tokens[elements] = sdsn ewlen(s+start,j-start);
+            tokens[elements] = sdsnewlen(s+start,j-start);
             if (tokens[elements] == NULL) {
 #ifdef SDS_ABORT_ON_OOM
                 sdsOomAbort();

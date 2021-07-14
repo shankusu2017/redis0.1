@@ -34,24 +34,26 @@
 /* Node, List, and Iterator are the only data structures used currently. */
 
 typedef struct listNode {
-    struct listNode *prev;
+    struct listNode *prev;	
     struct listNode *next;
     void *value;
 } listNode;
 
+/* 迭代器 */
 typedef struct listIter {
     listNode *next;
-    int direction;
+    int direction;	/* 迭代的方向 */
 } listIter;
 
+/* 双向链表，无环 */
 typedef struct list {
     listNode *head;
     listNode *tail;
     void *(*dup)(void *ptr);
     void (*free)(void *ptr);
     int (*match)(void *ptr, void *key);
-    unsigned int len;
-    listIter iter;
+    unsigned int len;	/* 元素数量 */
+    listIter iter;		
 } list;
 
 /* Functions implemented as macros */
@@ -76,18 +78,21 @@ void listRelease(list *list);
 list *listAddNodeHead(list *list, void *value);
 list *listAddNodeTail(list *list, void *value);
 void listDelNode(list *list, listNode *node);
+/* 按照指定方向，构建一个崭新的迭代器 */
 listIter *listGetIterator(list *list, int direction);
 listNode *listNext(listIter *iter);
 void listReleaseIterator(listIter *iter);
+
 list *listDup(list *orig);
 listNode *listSearchKey(list *list, void *key);
 listNode *listIndex(list *list, int index);
+/* rewind:倒带 */
 void listRewind(list *list);
 void listRewindTail(list *list);
 listNode *listYield(list *list);
 
 /* Directions for iterators */
-#define AL_START_HEAD 0
-#define AL_START_TAIL 1
+#define AL_START_HEAD 0		/* 从头往尾 */
+#define AL_START_TAIL 1		/* 从尾往头 */
 
 #endif /* __ADLIST_H__ */
