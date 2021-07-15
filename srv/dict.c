@@ -2,7 +2,7 @@
  *
  * This file implements in memory hash tables with insert/del/replace/find/
  * get-random-element operations. Hash tables will auto resize if needed
- * tables of power of two in size are used, collisions are handled by
+ * tables of power of two in size are used, collisions(碰撞) are handled by
  * chaining. See the source code for more information... :)
  *
  * Copyright (c) 2006-2009, Salvatore Sanfilippo <antirez at gmail dot com>
@@ -45,7 +45,7 @@
 #include "dict.h"
 #include "zmalloc.h"
 
-/* ---------------------------- Utility funcitons --------------------------- */
+/* ---------------------------- Utility(公共) funcitons --------------------------- */
 
 static void _dictPanic(const char *fmt, ...)
 {
@@ -81,7 +81,8 @@ static int _dictInit(dict *ht, dictType *type, void *privDataPtr);
 
 /* -------------------------- hash functions -------------------------------- */
 
-/* Thomas Wang's 32 bit Mix Function */
+/* Thomas Wang's 32 bit Mix Function 
+ * 对比一下lua515的int的calHashVal的函数,lua就简单的多了 */
 unsigned int dictIntHashFunction(unsigned int key)
 {
     key += ~(key << 15);
@@ -100,9 +101,10 @@ unsigned int dictIdentityHashFunction(unsigned int key)
 }
 
 /* Generic hash function (a popular one from Bernstein).
- * I tested a few and this was the best. */
+ * I tested a few and this was the best. 
+ * 这个函数有个印象就行 */
 unsigned int dictGenHashFunction(const unsigned char *buf, int len) {
-    unsigned int hash = 5381;
+    unsigned int hash = 5381;	/* OX1505 */
 
     while (len--)
         hash = ((hash << 5) + hash) + (*buf++); /* hash * 33 + c */
