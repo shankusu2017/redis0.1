@@ -48,6 +48,7 @@ typedef struct dictEntry {
     struct dictEntry *next;
 } dictEntry;
 
+/* dict相关事务的处理句柄原型 */
 typedef struct dictType {
     unsigned int (*hashFunction)(const void *key);
     void *(*keyDup)(void *privdata, const void *key);

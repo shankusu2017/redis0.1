@@ -104,7 +104,7 @@ unsigned int dictIdentityHashFunction(unsigned int key)
  * I tested a few and this was the best. 
  * 这个函数有个印象就行 */
 unsigned int dictGenHashFunction(const unsigned char *buf, int len) {
-    unsigned int hash = 5381;	/* OX1505 */
+    unsigned int hash = 5381;	/* Ox1505 */
 
     while (len--)
         hash = ((hash << 5) + hash) + (*buf++); /* hash * 33 + c */
@@ -114,20 +114,22 @@ unsigned int dictGenHashFunction(const unsigned char *buf, int len) {
 /* ----------------------------- API implementation ------------------------- */
 
 /* Reset an hashtable already initialized with ht_init().
- * NOTE: This function should only called by ht_destroy(). */
+ * NOTE: This function should only called by ht_destroy(). 
+ * init逻辑也调用了这里，没有遵守上面的NOTE事项 */
 static void _dictReset(dict *ht)
 {
     ht->table = NULL;
     ht->size = 0;
     ht->sizemask = 0;
     ht->used = 0;
+	/* type，private没有处理 */
 }
 
 /* Create a new hash table */
 dict *dictCreate(dictType *type,
         void *privDataPtr)
 {
-    dict *ht = _dictAlloc(sizeof(*ht));
+    dict *ht = _dictAlloc(sizeof(*ht));	/* 这里为何不是直接 sizeof(dict) 呢？ */
 
     _dictInit(ht,type,privDataPtr);
     return ht;
