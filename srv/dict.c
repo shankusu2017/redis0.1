@@ -216,8 +216,9 @@ int dictAdd(dict *ht, void *key, void *val)
     dictEntry *entry;
 
     /* Get the index of the new element, or -1 if
-     * the element already exists. */
-    if ((index = _dictKeyIndex(ht, key)) == -1)
+     * the element already exists.
+     * 自动进行size调整 */
+    if ((index = _dictKeyIndex(ht, key)) == -1)	
         return DICT_ERR;
 
     /* Allocates the memory and stores key */
@@ -232,7 +233,8 @@ int dictAdd(dict *ht, void *key, void *val)
     return DICT_OK;
 }
 
-/* Add an element, discarding the old if the key already exists */
+/* Add an element, discarding(丢弃) the old if the key already exists 
+ * 不存在则直接插入，存在着替换val */
 int dictReplace(dict *ht, void *key, void *val)
 {
     dictEntry *entry;
@@ -290,7 +292,8 @@ int dictDeleteNoFree(dict *ht, const void *key) {
     return dictGenericDelete(ht,key,1);
 }
 
-/* Destroy an entire hash table */
+/* Destroy an entire hash table 
+ * 释放整个hash表的数据，仅保留privateData和type句柄 */
 int _dictClear(dict *ht)
 {
     unsigned long i;
@@ -323,6 +326,7 @@ void dictRelease(dict *ht)
     _dictFree(ht);
 }
 
+/* 查找对应的entry */
 dictEntry *dictFind(dict *ht, const void *key)
 {
     dictEntry *he;
@@ -349,7 +353,7 @@ dictIterator *dictGetIterator(dict *ht)
     iter->nextEntry = NULL;
     return iter;
 }
-
+/* 搞明白这个函数，蛮有意思的哈,结合上面的dictGetIterator函数一起看更容易理解 */
 dictEntry *dictNext(dictIterator *iter)
 {
     while (1) {
@@ -377,7 +381,8 @@ void dictReleaseIterator(dictIterator *iter)
 }
 
 /* Return a random entry from the hash table. Useful to
- * implement randomized algorithms */
+ * implement randomized algorithms 
+ * 仔细看函数实现，是不是蛮简单的？ */
 dictEntry *dictGetRandomKey(dict *ht)
 {
     dictEntry *he;
@@ -449,7 +454,7 @@ static int _dictKeyIndex(dict *ht, const void *key)
     he = ht->table[h];
     while(he) {
         if (dictCompareHashKeys(ht, key, he->key))
-            return -1;
+            return -1;	/* key已存在，返回失败 */
         he = he->next;
     }
     return h;
