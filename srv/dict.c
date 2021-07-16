@@ -156,11 +156,13 @@ int dictResize(dict *ht)
     return dictExpand(ht, minimal);
 }
 
-/* Expand or create the hashtable */
+/* Expand or create the hashtable 
+ * 花点时间看代码，很容易理解：函数缺点：hash表的容量很大后，一次性处理完毕需要花费不少时间
+ * 后续的版本中改为了循循渐进的方式进行rehash */
 int dictExpand(dict *ht, unsigned long size)
 {
     dict n; /* the new hashtable */
-    unsigned long realsize = _dictNextPower(size), i;
+    unsigned long realsize = _dictNextPower(size), i;	/* 这里计算表高度的算法，有个印象就好 */
 
     /* the size is invalid if it is smaller than the number of
      * elements already inside the hashtable */
@@ -423,7 +425,7 @@ static unsigned long _dictNextPower(unsigned long size)
     unsigned long i = DICT_HT_INITIAL_SIZE;
 
     if (size >= LONG_MAX) return LONG_MAX;
-    while(1) {
+    while(1) {	/* 这个算法简单明了 */
         if (i >= size)
             return i;
         i *= 2;

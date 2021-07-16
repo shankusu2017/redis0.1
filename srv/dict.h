@@ -61,9 +61,9 @@ typedef struct dictType {
 typedef struct dict {
     dictEntry **table;
     dictType *type;
-    unsigned long size;
-    unsigned long sizemask;
-    unsigned long used;
+    unsigned long size;		/* hash表的大小 */
+    unsigned long sizemask; 
+    unsigned long used;		/* 实际包含元素的个数 */
     void *privdata;
 } dict;
 
