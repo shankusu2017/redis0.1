@@ -3674,6 +3674,7 @@ static int syncWrite(int fd, char *ptr, ssize_t size, int timeout) {
     return ret;
 }
 
+/* timeout:最长等待时长(eg:3600我需要在一小时内读完指定数量size的数据) */
 static int syncRead(int fd, char *ptr, ssize_t size, int timeout) {
     ssize_t nread, totread = 0;
     time_t start = time(NULL);

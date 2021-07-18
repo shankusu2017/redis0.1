@@ -231,7 +231,8 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
     /* Note that we want call select() even if there are no
      * file events to process as long as we want to process time
      * events, in order to sleep until the next time event is ready
-     * to fire. */
+     * to fire. 
+     * 单看本函数，不太明白文件描述符的fd和time的为什么被关联在一起 */
     if (numfd || ((flags & AE_TIME_EVENTS) && !(flags & AE_DONT_WAIT))) {
         int retval;
         aeTimeEvent *shortest = NULL;
@@ -265,9 +266,10 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
                 tvp = NULL; /* wait forever */
             }
         }
+		
 		/* tvp:传入参数，设置select阻塞的时间。
 		 * 若设置为NULL，则select一直阻塞直到有事件发生； 
-		 * 若设置为0，则select为非阻塞模式，执行后立即返回； 
+		 * 若设置为0，则select为非阻塞模式，执行后立即返回；
 		 * 若设置为一个大于0的数，即select的阻塞时间，若阻塞时间内有事件发生就返回，否则时间到了立即返回 */
         retval = select(maxfd+1, &rfds, &wfds, &efds, tvp);
         if (retval > 0) {
@@ -287,6 +289,7 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
                         mask |= AE_WRITABLE;
                     if (fe->mask & AE_EXCEPTION && FD_ISSET(fd, &efds))
                         mask |= AE_EXCEPTION;
+					/* filePorc中应该自动更新了eventLoop->fileEventHead */
                     fe->fileProc(eventLoop, fe->fd, fe->clientData, mask);
                     processed++;
                     /* After an event is processed our file event list
@@ -312,7 +315,7 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
             long now_sec, now_ms;
             long long id;
 
-            if (te->id > maxId) {
+            if (te->id > maxId) {	/* 新插入的本次不处理 */
                 te = te->next;
                 continue;
             }
