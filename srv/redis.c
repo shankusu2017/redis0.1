@@ -2336,7 +2336,7 @@ static void decrbyCommand(redisClient *c) {
     incrDecrCommand(c,-incr);
 }
 
-/* ========================= Type agnostic commands ========================= */
+/* ========================= Type agnostic(不可知) commands ========================= */
 
 static void delCommand(redisClient *c) {
     int deleted = 0, j;

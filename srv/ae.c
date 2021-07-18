@@ -72,8 +72,11 @@ int aeCreateFileEvent(aeEventLoop *eventLoop, int fd, int mask,
     fe->fileProc = proc;
     fe->finalizerProc = finalizerProc;
     fe->clientData = clientData;
+	
+	/* insert into the linked list */
     fe->next = eventLoop->fileEventHead;
     eventLoop->fileEventHead = fe;
+	
     return AE_OK;
 }
 
@@ -83,7 +86,7 @@ void aeDeleteFileEvent(aeEventLoop *eventLoop, int fd, int mask)
 
     fe = eventLoop->fileEventHead;
     while(fe) {
-        if (fe->fd == fd && fe->mask == mask) {
+        if (fe->fd == fd && fe->mask == mask) {	/* fd不是唯一的么，为何还要mask? */
             if (prev == NULL)
                 eventLoop->fileEventHead = fe->next;
             else
@@ -103,8 +106,8 @@ static void aeGetTime(long *seconds, long *milliseconds)
     struct timeval tv;
 
     gettimeofday(&tv, NULL);
-    *seconds = tv.tv_sec;
-    *milliseconds = tv.tv_usec/1000;
+    *seconds = tv.tv_sec;				/* tv_sec: 1485071975 */
+    *milliseconds = tv.tv_usec/1000; 	/* tv_usec(微秒): 721153 */
 }
 
 static void aeAddMillisecondsToNow(long long milliseconds, long *sec, long *ms) {
@@ -167,7 +170,8 @@ int aeDeleteTimeEvent(aeEventLoop *eventLoop, long long id)
  * put in sleep without to delay any event.
  * If there are no timers NULL is returned.
  *
- * Note that's O(N) since time events are unsorted. */
+ * Note that's O(N) since time events are unsorted. 
+ * 注意这里的复杂度是0(N) */
 static aeTimeEvent *aeSearchNearestTimer(aeEventLoop *eventLoop)
 {
     aeTimeEvent *te = eventLoop->timeEventHead;
@@ -215,6 +219,7 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
     /* Check file events */
     if (flags & AE_FILE_EVENTS) {
         while (fe != NULL) {
+			/* FS_SET:将fd加入到待测试的fd集合中 */
             if (fe->mask & AE_READABLE) FD_SET(fe->fd, &rfds);
             if (fe->mask & AE_WRITABLE) FD_SET(fe->fd, &wfds);
             if (fe->mask & AE_EXCEPTION) FD_SET(fe->fd, &efds);
@@ -260,7 +265,10 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
                 tvp = NULL; /* wait forever */
             }
         }
-
+		/* tvp:传入参数，设置select阻塞的时间。
+		 * 若设置为NULL，则select一直阻塞直到有事件发生； 
+		 * 若设置为0，则select为非阻塞模式，执行后立即返回； 
+		 * 若设置为一个大于0的数，即select的阻塞时间，若阻塞时间内有事件发生就返回，否则时间到了立即返回 */
         retval = select(maxfd+1, &rfds, &wfds, &efds, tvp);
         if (retval > 0) {
             fe = eventLoop->fileEventHead;
@@ -295,6 +303,7 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
             }
         }
     }
+	
     /* Check time events */
     if (flags & AE_TIME_EVENTS) {
         te = eventLoop->timeEventHead;

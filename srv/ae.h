@@ -63,10 +63,10 @@ typedef struct aeTimeEvent {
 
 /* State of an event based program */
 typedef struct aeEventLoop {
-    long long timeEventNextId;
+    long long timeEventNextId;	/* 0:init */
     aeFileEvent *fileEventHead;
     aeTimeEvent *timeEventHead;
-    int stop;
+    int stop;	/* 1:停止 */
 } aeEventLoop;
 
 /* Defines */
