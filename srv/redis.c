@@ -168,12 +168,12 @@
 typedef struct redisObject {
     void *ptr;
     int type;
-    int refcount;
+    int refcount;	/* 引用计数 */
 } robj;
 
 typedef struct redisDb {
-    dict *dict;
-    dict *expires;
+    dict *dict;		/* key-val */
+    dict *expires;	/* key的过期信息 */
     int id;
 } redisDb;
 
@@ -257,7 +257,7 @@ typedef void redisCommandProc(redisClient *c);
 struct redisCommand {
     char *name;
     redisCommandProc *proc;
-    int arity;
+    int arity;	/* 参数数量 */
     int flags;
 };
 
@@ -3706,6 +3706,7 @@ static int syncReadLine(int fd, char *ptr, ssize_t size, int timeout) {
         if (syncRead(fd,&c,1,timeout) == -1) return -1;
         if (c == '\n') {
             *ptr = '\0';
+			/* 这里将\r\n合并起来 */
             if (nread && *(ptr-1) == '\r') *(ptr-1) = '\0';
             return nread;
         } else {
