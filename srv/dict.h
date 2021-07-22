@@ -108,7 +108,9 @@ typedef struct dictIterator {
 
 #define dictGetEntryKey(he) ((he)->key)
 #define dictGetEntryVal(he) ((he)->val)
+/* 桶高 */
 #define dictSlots(ht) ((ht)->size)
+/* 已装入的元素个数 */
 #define dictSize(ht) ((ht)->used)
 
 /* API */

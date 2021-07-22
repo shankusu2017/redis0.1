@@ -53,7 +53,7 @@ typedef struct list {
     void (*free)(void *ptr);
     int (*match)(void *ptr, void *key);
     unsigned int len;	/* 元素数量 */
-    listIter iter;		
+    listIter iter;		/* 跟一个迭代器实体，要用到的时候直接初始化后即可使用 */
 } list;
 
 /* Functions implemented as macros */

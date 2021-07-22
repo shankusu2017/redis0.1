@@ -6,7 +6,7 @@ DEBUG?= -g
 CFLAGS?= -std=c99 -pedantic -O2 -Wall -W -DSDS_ABORT_ON_OOM
 CCOPT= $(CFLAGS)
 
-OBJ = zmalloc.o sds.o adlist.o dict.o lzf_c.o lzf_d.o pqsort.o ae.o anet.o redis.o
+OBJ = zmalloc.o sds.o adlist.o dict.o lzf_c.o lzf_d.o pqsort.o ae.o anet.o aid.o redis.o
 BENCHOBJ = ae.o anet.o benchmark.o sds.o adlist.o zmalloc.o
 CLIOBJ = anet.o sds.o adlist.o redis-cli.o zmalloc.o
 
@@ -27,6 +27,7 @@ redis.o: redis.c ae.h sds.h anet.h dict.h adlist.h zmalloc.c zmalloc.h
 sds.o: sds.c sds.h
 sha1.o: sha1.c sha1.h
 zmalloc.o: zmalloc.c
+aid.o: aid.c
 
 redis-server: $(OBJ)
 	$(CC) -o $(PRGNAME) $(CCOPT) $(DEBUG) $(OBJ)

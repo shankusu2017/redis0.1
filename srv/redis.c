@@ -58,6 +58,7 @@
 #include "zmalloc.h" /* total memory usage aware version of malloc/free */
 #include "lzf.h"    /* LZF compression library */
 #include "pqsort.h" /* Partial qsort for SORT+LIMIT */
+#include "aid.h"	/* aid function */
 
 /* Error codes */
 #define REDIS_OK                0
@@ -199,10 +200,7 @@ typedef struct redisClient {
     off_t repldbsize;       /* replication DB file size */
 } redisClient;
 
-struct saveparam {
-    time_t seconds;
-    int changes;
-};
+
 
 /* Global server state structure */
 struct redisServer {
@@ -215,7 +213,7 @@ struct redisServer {
     list *clients;
     list *slaves, *monitors;
     char neterr[ANET_ERR_LEN];
-    aeEventLoop *el;
+    aeEventLoop *el;			/* event loop */
     int cronloops;              /* number of times the cron function run */
     list *objfreelist;          /* A list of freed objects to avoid malloc() */
     time_t lastsave;            /* Unix time of last save succeeede */
@@ -368,7 +366,7 @@ static void slaveofCommand(redisClient *c);
 /*================================= Globals ================================= */
 
 /* Global vars */
-static struct redisServer server; /* server global state */
+struct redisServer server; /* server global state */
 static struct redisCommand cmdTable[] = {
     {"get",getCommand,2,REDIS_CMD_INLINE},
     {"set",setCommand,3,REDIS_CMD_BULK},
@@ -555,31 +553,6 @@ int stringmatchlen(const char *pattern, int patternLen,
     return 0;
 }
 
-void redisLog(int level, const char *fmt, ...)
-{
-    va_list ap;
-    FILE *fp;
-
-    fp = (server.logfile == NULL) ? stdout : fopen(server.logfile,"a");
-    if (!fp) return;
-
-    va_start(ap, fmt);
-    if (level >= server.verbosity) {
-        char *c = ".-*";
-        char buf[64];
-        time_t now;
-
-        now = time(NULL);
-        strftime(buf,64,"%d %b %H:%M:%S",gmtime(&now));
-        fprintf(fp,"%s %c ",buf,c[level]);
-        vfprintf(fp, fmt, ap);
-        fprintf(fp,"\n");
-        fflush(fp);
-    }
-    va_end(ap);
-
-    if (server.logfile) fclose(fp);
-}
 
 /*====================== Hash table type implementation  ==================== */
 
@@ -636,56 +609,8 @@ static dictType hashDictType = {
     dictRedisObjectDestructor   /* val destructor */
 };
 
-/* ========================= Random utility functions ======================= */
-
-/* Redis generally does not try to recover from out of memory conditions
- * when allocating objects or strings, it is not clear if it will be possible
- * to report this condition to the client since the networking layer itself
- * is based on heap allocation for send buffers, so we simply abort.
- * At least the code will be simpler to read... */
-static void oom(const char *msg) {
-    fprintf(stderr, "%s: Out of memory\n",msg);
-    fflush(stderr);
-    sleep(1);
-    abort();
-}
 
 /* ====================== Redis server networking stuff ===================== */
-void closeTimedoutClients(void) {
-    redisClient *c;
-    listNode *ln;
-    time_t now = time(NULL);
-
-    listRewind(server.clients);
-    while ((ln = listYield(server.clients)) != NULL) {
-        c = listNodeValue(ln);
-        if (!(c->flags & REDIS_SLAVE) &&    /* no timeout for slaves */
-            !(c->flags & REDIS_MASTER) &&   /* no timeout for masters */
-             (now - c->lastinteraction > server.maxidletime)) {
-            redisLog(REDIS_DEBUG,"Closing idle client");
-            freeClient(c);
-        }
-    }
-}
-
-/* If the percentage of used slots in the HT reaches REDIS_HT_MINFILL
- * we resize the hash table to save memory */
-void tryResizeHashTables(void) {
-    int j;
-
-    for (j = 0; j < server.dbnum; j++) {
-        long long size, used;
-
-        size = dictSlots(server.db[j].dict);
-        used = dictSize(server.db[j].dict);
-        if (size && used && size > REDIS_HT_MINSLOTS &&
-            (used*100/size < REDIS_HT_MINFILL)) {
-            redisLog(REDIS_NOTICE,"The hash table %d is too sparse, resize it...",j);
-            dictResize(server.db[j].dict);
-            redisLog(REDIS_NOTICE,"Hash table %d resized.",j);
-        }
-    }
-}
 
 int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     int j, loops = server.cronloops++;
@@ -835,47 +760,6 @@ static void createSharedObjects(void) {
     shared.select9 = createStringObject("select 9\r\n",10);
 }
 
-static void appendServerSaveParams(time_t seconds, int changes) {
-    server.saveparams = zrealloc(server.saveparams,sizeof(struct saveparam)*(server.saveparamslen+1));
-    if (server.saveparams == NULL) oom("appendServerSaveParams");
-    server.saveparams[server.saveparamslen].seconds = seconds;
-    server.saveparams[server.saveparamslen].changes = changes;
-    server.saveparamslen++;
-}
-
-static void ResetServerSaveParams() {
-    zfree(server.saveparams);
-    server.saveparams = NULL;
-    server.saveparamslen = 0;
-}
-
-static void initServerConfig() {
-    server.dbnum = REDIS_DEFAULT_DBNUM;
-    server.port = REDIS_SERVERPORT;
-    server.verbosity = REDIS_DEBUG;
-    server.maxidletime = REDIS_MAXIDLETIME;
-    server.saveparams = NULL;
-    server.logfile = NULL; /* NULL = log on standard output */
-    server.bindaddr = NULL;
-    server.glueoutputbuf = 1;
-    server.daemonize = 0;
-    server.pidfile = "/var/run/redis.pid";
-    server.dbfilename = "dump.rdb";
-    server.requirepass = NULL;
-    server.shareobjects = 0;
-    server.maxclients = 0;
-    ResetServerSaveParams();
-
-    appendServerSaveParams(60*60,1);  /* save after 1 hour and 1 change */
-    appendServerSaveParams(300,100);  /* save after 5 minutes and 100 changes */
-    appendServerSaveParams(60,10000); /* save after 1 minute and 10000 changes */
-    /* Replication related */
-    server.isslave = 0;
-    server.masterhost = NULL;
-    server.masterport = 6379;
-    server.master = NULL;
-    server.replstate = REDIS_REPL_NONE;
-}
 
 static void initServer() {
     int j;
@@ -1075,7 +959,7 @@ static void freeClientArgv(redisClient *c) {
 
 static void freeClient(redisClient *c) {
     listNode *ln;
-
+	/* 从事件循环中摘除节点 */
     aeDeleteFileEvent(server.el,c->fd,AE_READABLE);
     aeDeleteFileEvent(server.el,c->fd,AE_WRITABLE);
     sdsfree(c->querybuf);
@@ -1084,7 +968,7 @@ static void freeClient(redisClient *c) {
     close(c->fd);
     ln = listSearchKey(server.clients,c);
     assert(ln != NULL);
-    listDelNode(server.clients,ln);
+    listDelNode(server.clients,ln);	/* 从列表上摘除对应的node */
     if (c->flags & REDIS_SLAVE) {
         if (c->replstate == REDIS_REPL_SEND_BULK && c->repldbfd != -1)
             close(c->repldbfd);
