@@ -37,5 +37,6 @@ void dictRedisObjectDestructor(void *privdata, void *val);
 int dictSdsKeyCompare(void *privdata, const void *key1,
 				const void *key2);
 unsigned int dictSdsHash(const void *key);
+void createSharedObjects(void);
 
 #endif

@@ -191,7 +191,7 @@ typedef struct redisClient {
 	
 	/* 从socket接收到的原始字节流数据，尚未整理 */
     sds querybuf;	
-	/* 整理后的，待处理的cli的命令 */
+	/* 整理后的，待处理的cli的命令 argv[0]=cmd, argv[1]=data */
     robj **argv;	
     int argc;
 	
@@ -286,10 +286,10 @@ struct redisServer {
 
 typedef void redisCommandProc(redisClient *c);
 struct redisCommand {
-    char *name;
-    redisCommandProc *proc;
-    int arity;	/* 参数数量 */
-    int flags;
+    char *name;					/* 能处理的命令的name */
+    redisCommandProc *proc;		/* 处理该命令的句柄 */
+    int arity;					/* 包含命令名在内的所有参数数量 */
+    int flags;					/* */
 };
 
 typedef struct _redisSortObject {
@@ -661,46 +661,9 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
             redisLog(REDIS_NOTICE,"MASTER <-> SLAVE sync succeeded");
         }
     }
+	/* 返回1秒而不是 AE_NOMORE,表示重新开一个周期一秒的定时器 */
     return 1000;
 }
-
-static void createSharedObjects(void) {
-    shared.crlf = createObject(REDIS_STRING,sdsnew("\r\n"));
-    shared.ok = createObject(REDIS_STRING,sdsnew("+OK\r\n"));
-    shared.err = createObject(REDIS_STRING,sdsnew("-ERR\r\n"));
-    shared.emptybulk = createObject(REDIS_STRING,sdsnew("$0\r\n\r\n"));
-    shared.czero = createObject(REDIS_STRING,sdsnew(":0\r\n"));
-    shared.cone = createObject(REDIS_STRING,sdsnew(":1\r\n"));
-    shared.nullbulk = createObject(REDIS_STRING,sdsnew("$-1\r\n"));
-    shared.nullmultibulk = createObject(REDIS_STRING,sdsnew("*-1\r\n"));
-    shared.emptymultibulk = createObject(REDIS_STRING,sdsnew("*0\r\n"));
-    /* no such key */
-    shared.pong = createObject(REDIS_STRING,sdsnew("+PONG\r\n"));
-    shared.wrongtypeerr = createObject(REDIS_STRING,sdsnew(
-        "-ERR Operation against a key holding the wrong kind of value\r\n"));
-    shared.nokeyerr = createObject(REDIS_STRING,sdsnew(
-        "-ERR no such key\r\n"));
-    shared.syntaxerr = createObject(REDIS_STRING,sdsnew(
-        "-ERR syntax error\r\n"));
-    shared.sameobjecterr = createObject(REDIS_STRING,sdsnew(
-        "-ERR source and destination objects are the same\r\n"));
-    shared.outofrangeerr = createObject(REDIS_STRING,sdsnew(
-        "-ERR index out of range\r\n"));
-    shared.space = createObject(REDIS_STRING,sdsnew(" "));
-    shared.colon = createObject(REDIS_STRING,sdsnew(":"));
-    shared.plus = createObject(REDIS_STRING,sdsnew("+"));
-    shared.select0 = createStringObject("select 0\r\n",10);
-    shared.select1 = createStringObject("select 1\r\n",10);
-    shared.select2 = createStringObject("select 2\r\n",10);
-    shared.select3 = createStringObject("select 3\r\n",10);
-    shared.select4 = createStringObject("select 4\r\n",10);
-    shared.select5 = createStringObject("select 5\r\n",10);
-    shared.select6 = createStringObject("select 6\r\n",10);
-    shared.select7 = createStringObject("select 7\r\n",10);
-    shared.select8 = createStringObject("select 8\r\n",10);
-    shared.select9 = createStringObject("select 9\r\n",10);
-}
-
 
 static void initServer() {
     int j;
@@ -737,31 +700,39 @@ static void initServer() {
     server.stat_numcommands = 0;
     server.stat_numconnections = 0;
     server.stat_starttime = time(NULL);
+	
+	/* 创建一个1秒的定时器 */
     aeCreateTimeEvent(server.el, 1000, serverCron, NULL, NULL);
 }
 
 /* socket断开后，释放client */
 static void freeClient(redisClient *c) {
     listNode *ln;
-	/* 从事件循环中摘除节点 */
+	
+	/* 从事件链表中摘除节点，关闭fd,清除基础的buf */
     aeDeleteFileEvent(server.el,c->fd,AE_READABLE);
     aeDeleteFileEvent(server.el,c->fd,AE_WRITABLE);
     sdsfree(c->querybuf);
     listRelease(c->reply);
     freeClientArgv(c);
     close(c->fd);
+	
     ln = listSearchKey(server.clients,c);
     assert(ln != NULL);
     listDelNode(server.clients,ln);	/* 从列表上摘除对应的node */
-    if (c->flags & REDIS_SLAVE) {
+	
+    if (c->flags & REDIS_SLAVE) {	/* 我是master,c是一个slave链接 */
         if (c->replstate == REDIS_REPL_SEND_BULK && c->repldbfd != -1)
             close(c->repldbfd);
+		
+		/* 从相应的list中移除 */
         list *l = (c->flags & REDIS_MONITOR) ? server.monitors : server.slaves;
         ln = listSearchKey(l,c);
         assert(ln != NULL);
         listDelNode(l,ln);
     }
-    if (c->flags & REDIS_MASTER) {
+	
+    if (c->flags & REDIS_MASTER) {	/* 我是slave, c是一个master链接 */
         server.master = NULL;
         server.replstate = REDIS_REPL_CONNECT;
     }
@@ -769,15 +740,7 @@ static void freeClient(redisClient *c) {
     zfree(c);
 }
 
-/* 尝试查找name对应的命令处理句柄 */
-static struct redisCommand *lookupCommand(char *name) {
-    int j = 0;
-    while(cmdTable[j].name != NULL) {
-        if (!strcasecmp(name,cmdTable[j].name)) return &cmdTable[j];
-        j++;
-    }
-    return NULL;
-}
+
 
 /* If this function gets called we already read a whole
  * command, argments are in the client argv/argc fields.
@@ -851,6 +814,7 @@ static int processCommand(redisClient *c) {
         replicationFeedSlaves(server.slaves,cmd,c->db->id,c->argv,c->argc);
     if (listLength(server.monitors))
         replicationFeedSlaves(server.monitors,cmd,c->db->id,c->argv,c->argc);
+	
     server.stat_numcommands++;
 
     /* Prepare the client for the next command */
@@ -1185,7 +1149,10 @@ static int deleteKey(redisDb *db, robj *key) {
      * it's count. This may happen when we get the object reference directly
      * from the hash table with dictRandomKey() or dict iterators */
     incrRefCount(key);
-    if (dictSize(db->expires)) dictDelete(db->expires,key);
+	
+    if (dictSize(db->expires))
+		dictDelete(db->expires,key);
+	
     retval = dictDelete(db->dict,key);
     decrRefCount(key);
 

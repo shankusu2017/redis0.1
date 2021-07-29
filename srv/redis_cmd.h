@@ -60,4 +60,6 @@ void getSetCommand(redisClient *c);
 void ttlCommand(redisClient *c);
 void slaveofCommand(redisClient *c);
 
+struct redisCommand *lookupCommand(char *name);
+
 #endif
