@@ -110,7 +110,7 @@ int anetTcpKeepAlive(char *err, int fd)
     return ANET_OK;
 }
 
-/* 如果输入的是域名eg: redis.io则尝试将其转为IP地址 */
+/* 如果输入的是域名eg: redis.io 则尝试将其转为IP地址 */
 int anetResolve(char *err, char *host, char *ipbuf)
 {
     struct sockaddr_in sa;
@@ -152,10 +152,10 @@ static int anetTcpGenericConnect(char *err, char *addr, int port, int flags)
     sa.sin_port = htons(port);
 	
 	/* hostname->ip.addr */
-    if (inet_aton(addr, &sa.sin_addr) == 0) {	/* 输入的是域名(redis.io) */
+    if (inet_aton(addr, &sa.sin_addr) == 0) {	/* 输入的是IP地址？ */
         struct hostent *he;
 
-        he = gethostbyname(addr);	/* 通过dns将域名转换为主机信息(IP地址等...) */
+        he = gethostbyname(addr);	/* 通过dns将域名(redis.io)转换为主机信息(IP地址等...) */
         if (he == NULL) {
             anetSetError(err, "can't resolve: %s\n", addr);
             close(s);
@@ -217,7 +217,7 @@ int anetRead(int fd, char *buf, int count)
     return totlen;
 }
 
-/* Like write(2) but make sure 'count' is read before to return
+/* Like write(2) but make sure 'count' is write before to return
  * (unless error is encountered) */
 int anetWrite(int fd, char *buf, int count)
 {

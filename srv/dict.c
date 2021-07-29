@@ -162,7 +162,7 @@ int dictResize(dict *ht)
 int dictExpand(dict *ht, unsigned long size)
 {
     dict n; /* the new hashtable */
-    unsigned long realsize = _dictNextPower(size), i;	/* 这里计算表高度的算法，有个印象就好 */
+    unsigned long realsize = _dictNextPower(size), i;	/* 计算表高度，有个印象就好 */
 
     /* the size is invalid if it is smaller than the number of
      * elements already inside the hashtable */
@@ -218,7 +218,7 @@ int dictAdd(dict *ht, void *key, void *val)
     /* Get the index of the new element, or -1 if
      * the element already exists.
      * 自动进行size调整 */
-    if ((index = _dictKeyIndex(ht, key)) == -1)	
+    if ((index = _dictKeyIndex(ht, key)) == -1)		/* 已经存在或腾挪MEM失败(for key,val) 时返回 -1 */
         return DICT_ERR;
 
     /* Allocates the memory and stores key */

@@ -59,6 +59,7 @@
 #include "lzf.h"    /* LZF compression library */
 #include "pqsort.h" /* Partial qsort for SORT+LIMIT */
 #include "aid.h"	/* aid function */
+#include "redis_cmd.h"
 
 /* Error codes */
 #define REDIS_OK                0
@@ -70,8 +71,8 @@
 #define REDIS_IOBUF_LEN         1024
 #define REDIS_LOADBUF_LEN       1024
 #define REDIS_STATIC_ARGS       4
-#define REDIS_DEFAULT_DBNUM     16
-#define REDIS_CONFIGLINE_MAX    1024
+#define REDIS_DEFAULT_DBNUM     16		/* 默认数据库数量 */
+#define REDIS_CONFIGLINE_MAX    1024	
 #define REDIS_OBJFREELIST_MAX   1000000 /* Max number of objects to cache */
 #define REDIS_MAX_SYNC_TIME     60      /* Slave can't take more to sync */
 #define REDIS_EXPIRELOOKUPS_PER_CRON    100 /* try to expire 100 keys/second */
@@ -97,11 +98,11 @@
 
 /* Defines related to the dump file format. To store 32 bits lengths for short
  * keys requires a lot of space, so we check the most significant 2 bits of
- * the first byte to interpreter the length:
+ * the first byte to interpreter(翻译) the length:
  *
  * 00|000000 => if the two MSB are 00 the len is the 6 bits of this byte
  * 01|000000 00000000 =>  01, the len is 14 byes, 6 bits + 8 bits of next byte
- * 10|000000 [32 bit integer] => if it's 01, a full 32 bit len will follow
+ * 10|000000 [32 bit integer] => if it's 10, a full 32 bit len will follow
  * 11|000000 this means: specially encoded object will follow. The six bits
  *           number specify the kind of object that follows.
  *           See the REDIS_RDB_ENC_* defines.
@@ -128,7 +129,7 @@
 #define REDIS_MASTER 4      /* This client is a master server */
 #define REDIS_MONITOR 8      /* This client is a slave monitor, see MONITOR */
 
-/* Slave replication state - slave side */
+/* Slave replication(复制) state - slave side */
 #define REDIS_REPL_NONE 0   /* No active replication */
 #define REDIS_REPL_CONNECT 1    /* Must connect to master */
 #define REDIS_REPL_CONNECTED 2  /* Connected to master */
@@ -168,6 +169,7 @@
 /* A redis object, that is a type able to hold a string / list / set */
 typedef struct redisObject {
     void *ptr;
+	/* REDIS_STRING, REDIS_LIST, REDIS_SET, REDIS_HASH */
     int type;
     int refcount;	/* 引用计数 */
 } robj;
@@ -182,60 +184,90 @@ typedef struct redisDb {
  * Clients are taken in a liked list. */
 typedef struct redisClient {
     int fd;
+	
+	/* 客户端选择的db */
     redisDb *db;
     int dictid;
-    sds querybuf;
-    robj **argv;
+	
+	/* 从socket接收到的原始字节流数据，尚未整理 */
+    sds querybuf;	
+	/* 整理后的，待处理的cli的命令 */
+    robj **argv;	
     int argc;
+	
     int bulklen;            /* bulk read len. -1 if not in bulk read mode */
+	
+	/* 待发往客户端的回复的数据 */
     list *reply;
     int sentlen;
+	
     time_t lastinteraction; /* time of the last interaction, used for timeout */
+	
     int flags;              /* REDIS_CLOSE | REDIS_SLAVE | REDIS_MONITOR */
+	
     int slaveseldb;         /* slave selected db, if this client is a slave */
+	
     int authenticated;      /* when requirepass is non-NULL */
+	
     int replstate;          /* replication state if this is a slave */
     int repldbfd;           /* replication DB file descriptor */
     long repldboff;          /* replication DB file offset */
     off_t repldbsize;       /* replication DB file size */
 } redisClient;
 
-
-
 /* Global server state structure */
 struct redisServer {
     int port;
     int fd;
+	
     redisDb *db;
     dict *sharingpool;
     unsigned int sharingpoolsize;
+	
     long long dirty;            /* changes to DB from the last save */
+	
     list *clients;
     list *slaves, *monitors;
+	
     char neterr[ANET_ERR_LEN];
+	
     aeEventLoop *el;			/* event loop */
+	
     int cronloops;              /* number of times the cron function run */
+	
     list *objfreelist;          /* A list of freed objects to avoid malloc() */
+	
     time_t lastsave;            /* Unix time of last save succeeede */
+	
     size_t usedmemory;             /* Used memory in megabytes */
+	
     /* Fields used only for stats */
     time_t stat_starttime;         /* server start time */
     long long stat_numcommands;    /* number of processed commands */
     long long stat_numconnections; /* number of connections received */
+	
     /* Configuration */
     int verbosity;
     int glueoutputbuf;
+	
     int maxidletime;
+	
     int dbnum;
+	
     int daemonize;
-    char *pidfile;
-    int bgsaveinprogress;
+	
+    char *pidfile;	
+	
+    int bgsaveinprogress;	/* 当前是否有子进程将数据写到文件系统？,1:是 */
     struct saveparam *saveparams;
     int saveparamslen;
+	
     char *logfile;
     char *bindaddr;
     char *dbfilename;
+	
     char *requirepass;
+	
     int shareobjects;
     /* Replication related */
     int isslave;
@@ -244,6 +276,7 @@ struct redisServer {
     redisClient *master;    /* client that is master for this slave */
     int replstate;
     unsigned int maxclients;
+	
     /* Sort parameters - qsort_r() is only available under BSD so we
      * have to take this state global, in order to pass it to sortCompare() */
     int sort_desc;
@@ -283,85 +316,20 @@ struct sharedObjectsStruct {
 
 /*================================ Prototypes =============================== */
 
-static void freeStringObject(robj *o);
-static void freeListObject(robj *o);
-static void freeSetObject(robj *o);
-static void decrRefCount(void *o);
-static robj *createObject(int type, void *ptr);
 static void freeClient(redisClient *c);
 static int rdbLoad(char *filename);
 static void addReply(redisClient *c, robj *obj);
 static void addReplySds(redisClient *c, sds s);
-static void incrRefCount(robj *o);
 static int rdbSaveBackground(char *filename);
-static robj *createStringObject(char *ptr, size_t len);
 static void replicationFeedSlaves(list *slaves, struct redisCommand *cmd, int dictid, robj **argv, int argc);
 static int syncWithMaster(void);
 static robj *tryObjectSharing(robj *o);
-static int removeExpire(redisDb *db, robj *key);
-static int expireIfNeeded(redisDb *db, robj *key);
 static int deleteIfVolatile(redisDb *db, robj *key);
 static int deleteKey(redisDb *db, robj *key);
 static time_t getExpire(redisDb *db, robj *key);
 static int setExpire(redisDb *db, robj *key, time_t when);
 static void updateSalvesWaitingBgsave(int bgsaveerr);
 
-static void authCommand(redisClient *c);
-static void pingCommand(redisClient *c);
-static void echoCommand(redisClient *c);
-static void setCommand(redisClient *c);
-static void setnxCommand(redisClient *c);
-static void getCommand(redisClient *c);
-static void delCommand(redisClient *c);
-static void existsCommand(redisClient *c);
-static void incrCommand(redisClient *c);
-static void decrCommand(redisClient *c);
-static void incrbyCommand(redisClient *c);
-static void decrbyCommand(redisClient *c);
-static void selectCommand(redisClient *c);
-static void randomkeyCommand(redisClient *c);
-static void keysCommand(redisClient *c);
-static void dbsizeCommand(redisClient *c);
-static void lastsaveCommand(redisClient *c);
-static void saveCommand(redisClient *c);
-static void bgsaveCommand(redisClient *c);
-static void shutdownCommand(redisClient *c);
-static void moveCommand(redisClient *c);
-static void renameCommand(redisClient *c);
-static void renamenxCommand(redisClient *c);
-static void lpushCommand(redisClient *c);
-static void rpushCommand(redisClient *c);
-static void lpopCommand(redisClient *c);
-static void rpopCommand(redisClient *c);
-static void llenCommand(redisClient *c);
-static void lindexCommand(redisClient *c);
-static void lrangeCommand(redisClient *c);
-static void ltrimCommand(redisClient *c);
-static void typeCommand(redisClient *c);
-static void lsetCommand(redisClient *c);
-static void saddCommand(redisClient *c);
-static void sremCommand(redisClient *c);
-static void smoveCommand(redisClient *c);
-static void sismemberCommand(redisClient *c);
-static void scardCommand(redisClient *c);
-static void sinterCommand(redisClient *c);
-static void sinterstoreCommand(redisClient *c);
-static void sunionCommand(redisClient *c);
-static void sunionstoreCommand(redisClient *c);
-static void sdiffCommand(redisClient *c);
-static void sdiffstoreCommand(redisClient *c);
-static void syncCommand(redisClient *c);
-static void flushdbCommand(redisClient *c);
-static void flushallCommand(redisClient *c);
-static void sortCommand(redisClient *c);
-static void lremCommand(redisClient *c);
-static void infoCommand(redisClient *c);
-static void mgetCommand(redisClient *c);
-static void monitorCommand(redisClient *c);
-static void expireCommand(redisClient *c);
-static void getSetCommand(redisClient *c);
-static void ttlCommand(redisClient *c);
-static void slaveofCommand(redisClient *c);
 
 /*================================= Globals ================================= */
 
@@ -560,36 +528,7 @@ int stringmatchlen(const char *pattern, int patternLen,
  * keys and radis objects as values (objects can hold SDS strings,
  * lists, sets). */
 
-static int sdsDictKeyCompare(void *privdata, const void *key1,
-        const void *key2)
-{
-    int l1,l2;
-    DICT_NOTUSED(privdata);
 
-    l1 = sdslen((sds)key1);
-    l2 = sdslen((sds)key2);
-    if (l1 != l2) return 0;
-    return memcmp(key1, key2, l1) == 0;
-}
-
-static void dictRedisObjectDestructor(void *privdata, void *val)
-{
-    DICT_NOTUSED(privdata);
-
-    decrRefCount(val);
-}
-
-static int dictSdsKeyCompare(void *privdata, const void *key1,
-        const void *key2)
-{
-    const robj *o1 = key1, *o2 = key2;
-    return sdsDictKeyCompare(privdata,o1->ptr,o2->ptr);
-}
-
-static unsigned int dictSdsHash(const void *key) {
-    const robj *o = key;
-    return dictGenHashFunction(o->ptr, sdslen((sds)o->ptr));
-}
 
 static dictType setDictType = {
     dictSdsHash,               /* hash function */
@@ -610,7 +549,7 @@ static dictType hashDictType = {
 };
 
 
-/* ====================== Redis server networking stuff ===================== */
+/* ====================== Redis server networking stuff(东西，部分) ===================== */
 
 int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     int j, loops = server.cronloops++;
@@ -655,11 +594,12 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     if (server.maxidletime && !(loops % 10))
         closeTimedoutClients();
 
-    /* Check if a background saving in progress terminated */
+    /* Check if a background saving in progress terminated
+     * 如果有子进程在saveback则检查是否以完成，没有saveback则检查是否能开启saveback */
     if (server.bgsaveinprogress) {
         int statloc;
         /* XXX: TODO handle the case of the saving child killed */
-        if (wait4(-1,&statloc,WNOHANG,NULL)) {
+        if (wait4(-1,&statloc,WNOHANG,NULL)) {	/* 检查下backgroud.saveDB的子进程是否运行完毕后退出了 */
             int exitcode = WEXITSTATUS(statloc);
             if (exitcode == 0) {
                 redisLog(REDIS_NOTICE,
@@ -690,7 +630,8 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
          }
     }
 
-    /* Try to expire a few timed out keys */
+    /* Try to expire a few timed out keys 
+	 * 随机删除一批过期的数据 */
     for (j = 0; j < server.dbnum; j++) {
         redisDb *db = server.db+j;
         int num = dictSize(db->expires);
@@ -799,164 +740,7 @@ static void initServer() {
     aeCreateTimeEvent(server.el, 1000, serverCron, NULL, NULL);
 }
 
-/* Empty the whole database */
-static long long emptyDb() {
-    int j;
-    long long removed = 0;
-
-    for (j = 0; j < server.dbnum; j++) {
-        removed += dictSize(server.db[j].dict);
-        dictEmpty(server.db[j].dict);
-        dictEmpty(server.db[j].expires);
-    }
-    return removed;
-}
-
-static int yesnotoi(char *s) {
-    if (!strcasecmp(s,"yes")) return 1;
-    else if (!strcasecmp(s,"no")) return 0;
-    else return -1;
-}
-
-/* I agree, this is a very rudimental way to load a configuration...
-   will improve later if the config gets more complex */
-static void loadServerConfig(char *filename) {
-    FILE *fp = fopen(filename,"r");
-    char buf[REDIS_CONFIGLINE_MAX+1], *err = NULL;
-    int linenum = 0;
-    sds line = NULL;
-    
-    if (!fp) {
-        redisLog(REDIS_WARNING,"Fatal error, can't open config file");
-        exit(1);
-    }
-    while(fgets(buf,REDIS_CONFIGLINE_MAX+1,fp) != NULL) {
-        sds *argv;
-        int argc, j;
-
-        linenum++;
-        line = sdsnew(buf);
-        line = sdstrim(line," \t\r\n");
-
-        /* Skip comments and blank lines*/
-        if (line[0] == '#' || line[0] == '\0') {
-            sdsfree(line);
-            continue;
-        }
-
-        /* Split into arguments */
-        argv = sdssplitlen(line,sdslen(line)," ",1,&argc);
-        sdstolower(argv[0]);
-
-        /* Execute config directives */
-        if (!strcasecmp(argv[0],"timeout") && argc == 2) {
-            server.maxidletime = atoi(argv[1]);
-            if (server.maxidletime < 0) {
-                err = "Invalid timeout value"; goto loaderr;
-            }
-        } else if (!strcasecmp(argv[0],"port") && argc == 2) {
-            server.port = atoi(argv[1]);
-            if (server.port < 1 || server.port > 65535) {
-                err = "Invalid port"; goto loaderr;
-            }
-        } else if (!strcasecmp(argv[0],"bind") && argc == 2) {
-            server.bindaddr = zstrdup(argv[1]);
-        } else if (!strcasecmp(argv[0],"save") && argc == 3) {
-            int seconds = atoi(argv[1]);
-            int changes = atoi(argv[2]);
-            if (seconds < 1 || changes < 0) {
-                err = "Invalid save parameters"; goto loaderr;
-            }
-            appendServerSaveParams(seconds,changes);
-        } else if (!strcasecmp(argv[0],"dir") && argc == 2) {
-            if (chdir(argv[1]) == -1) {
-                redisLog(REDIS_WARNING,"Can't chdir to '%s': %s",
-                    argv[1], strerror(errno));
-                exit(1);
-            }
-        } else if (!strcasecmp(argv[0],"loglevel") && argc == 2) {
-            if (!strcasecmp(argv[1],"debug")) server.verbosity = REDIS_DEBUG;
-            else if (!strcasecmp(argv[1],"notice")) server.verbosity = REDIS_NOTICE;
-            else if (!strcasecmp(argv[1],"warning")) server.verbosity = REDIS_WARNING;
-            else {
-                err = "Invalid log level. Must be one of debug, notice, warning";
-                goto loaderr;
-            }
-        } else if (!strcasecmp(argv[0],"logfile") && argc == 2) {
-            FILE *fp;
-
-            server.logfile = zstrdup(argv[1]);
-            if (!strcasecmp(server.logfile,"stdout")) {
-                zfree(server.logfile);
-                server.logfile = NULL;
-            }
-            if (server.logfile) {
-                /* Test if we are able to open the file. The server will not
-                 * be able to abort just for this problem later... */
-                fp = fopen(server.logfile,"a");
-                if (fp == NULL) {
-                    err = sdscatprintf(sdsempty(),
-                        "Can't open the log file: %s", strerror(errno));
-                    goto loaderr;
-                }
-                fclose(fp);
-            }
-        } else if (!strcasecmp(argv[0],"databases") && argc == 2) {
-            server.dbnum = atoi(argv[1]);
-            if (server.dbnum < 1) {
-                err = "Invalid number of databases"; goto loaderr;
-            }
-        } else if (!strcasecmp(argv[0],"maxclients") && argc == 2) {
-            server.maxclients = atoi(argv[1]);
-        } else if (!strcasecmp(argv[0],"slaveof") && argc == 3) {
-            server.masterhost = sdsnew(argv[1]);
-            server.masterport = atoi(argv[2]);
-            server.replstate = REDIS_REPL_CONNECT;
-        } else if (!strcasecmp(argv[0],"glueoutputbuf") && argc == 2) {
-            if ((server.glueoutputbuf = yesnotoi(argv[1])) == -1) {
-                err = "argument must be 'yes' or 'no'"; goto loaderr;
-            }
-        } else if (!strcasecmp(argv[0],"shareobjects") && argc == 2) {
-            if ((server.shareobjects = yesnotoi(argv[1])) == -1) {
-                err = "argument must be 'yes' or 'no'"; goto loaderr;
-            }
-        } else if (!strcasecmp(argv[0],"daemonize") && argc == 2) {
-            if ((server.daemonize = yesnotoi(argv[1])) == -1) {
-                err = "argument must be 'yes' or 'no'"; goto loaderr;
-            }
-        } else if (!strcasecmp(argv[0],"requirepass") && argc == 2) {
-          server.requirepass = zstrdup(argv[1]);
-        } else if (!strcasecmp(argv[0],"pidfile") && argc == 2) {
-          server.pidfile = zstrdup(argv[1]);
-        } else if (!strcasecmp(argv[0],"dbfilename") && argc == 2) {
-          server.dbfilename = zstrdup(argv[1]);
-        } else {
-            err = "Bad directive or wrong number of arguments"; goto loaderr;
-        }
-        for (j = 0; j < argc; j++)
-            sdsfree(argv[j]);
-        zfree(argv);
-        sdsfree(line);
-    }
-    fclose(fp);
-    return;
-
-loaderr:
-    fprintf(stderr, "\n*** FATAL CONFIG FILE ERROR ***\n");
-    fprintf(stderr, "Reading the configuration file, at line %d\n", linenum);
-    fprintf(stderr, ">>> '%s'\n", line);
-    fprintf(stderr, "%s\n", err);
-    exit(1);
-}
-
-static void freeClientArgv(redisClient *c) {
-    int j;
-
-    for (j = 0; j < c->argc; j++)
-        decrRefCount(c->argv[j]);
-    c->argc = 0;
-}
-
+/* socket断开后，释放client */
 static void freeClient(redisClient *c) {
     listNode *ln;
 	/* 从事件循环中摘除节点 */
@@ -985,85 +769,7 @@ static void freeClient(redisClient *c) {
     zfree(c);
 }
 
-static void glueReplyBuffersIfNeeded(redisClient *c) {
-    int totlen = 0;
-    listNode *ln;
-    robj *o;
-
-    listRewind(c->reply);
-    while((ln = listYield(c->reply))) {
-        o = ln->value;
-        totlen += sdslen(o->ptr);
-        /* This optimization makes more sense if we don't have to copy
-         * too much data */
-        if (totlen > 1024) return;
-    }
-    if (totlen > 0) {
-        char buf[1024];
-        int copylen = 0;
-
-        listRewind(c->reply);
-        while((ln = listYield(c->reply))) {
-            o = ln->value;
-            memcpy(buf+copylen,o->ptr,sdslen(o->ptr));
-            copylen += sdslen(o->ptr);
-            listDelNode(c->reply,ln);
-        }
-        /* Now the output buffer is empty, add the new single element */
-        o = createObject(REDIS_STRING,sdsnewlen(buf,totlen));
-        if (!listAddNodeTail(c->reply,o)) oom("listAddNodeTail");
-    }
-}
-
-static void sendReplyToClient(aeEventLoop *el, int fd, void *privdata, int mask) {
-    redisClient *c = privdata;
-    int nwritten = 0, totwritten = 0, objlen;
-    robj *o;
-    REDIS_NOTUSED(el);
-    REDIS_NOTUSED(mask);
-
-    if (server.glueoutputbuf && listLength(c->reply) > 1)
-        glueReplyBuffersIfNeeded(c);
-    while(listLength(c->reply)) {
-        o = listNodeValue(listFirst(c->reply));
-        objlen = sdslen(o->ptr);
-
-        if (objlen == 0) {
-            listDelNode(c->reply,listFirst(c->reply));
-            continue;
-        }
-
-        if (c->flags & REDIS_MASTER) {
-            nwritten = objlen - c->sentlen;
-        } else {
-            nwritten = write(fd, ((char*)o->ptr)+c->sentlen, objlen - c->sentlen);
-            if (nwritten <= 0) break;
-        }
-        c->sentlen += nwritten;
-        totwritten += nwritten;
-        /* If we fully sent the object on head go to the next one */
-        if (c->sentlen == objlen) {
-            listDelNode(c->reply,listFirst(c->reply));
-            c->sentlen = 0;
-        }
-    }
-    if (nwritten == -1) {
-        if (errno == EAGAIN) {
-            nwritten = 0;
-        } else {
-            redisLog(REDIS_DEBUG,
-                "Error writing to client: %s", strerror(errno));
-            freeClient(c);
-            return;
-        }
-    }
-    if (totwritten > 0) c->lastinteraction = time(NULL);
-    if (listLength(c->reply) == 0) {
-        c->sentlen = 0;
-        aeDeleteFileEvent(server.el,c->fd,AE_WRITABLE);
-    }
-}
-
+/* 尝试查找name对应的命令处理句柄 */
 static struct redisCommand *lookupCommand(char *name) {
     int j = 0;
     while(cmdTable[j].name != NULL) {
@@ -1071,12 +777,6 @@ static struct redisCommand *lookupCommand(char *name) {
         j++;
     }
     return NULL;
-}
-
-/* resetClient prepare the client to process the next command */
-static void resetClient(redisClient *c) {
-    freeClientArgv(c);
-    c->bulklen = -1;
 }
 
 /* If this function gets called we already read a whole
@@ -1097,13 +797,14 @@ static int processCommand(redisClient *c) {
         freeClient(c);
         return 0;
     }
+	
     cmd = lookupCommand(c->argv[0]->ptr);
-    if (!cmd) {
+    if (!cmd) {	/* 命令不存在 */
         addReplySds(c,sdsnew("-ERR unknown command\r\n"));
         resetClient(c);
         return 1;
     } else if ((cmd->arity > 0 && cmd->arity != c->argc) ||
-               (c->argc < -cmd->arity)) {
+               (c->argc < -cmd->arity)) {	/* 参数数量非法 */
         addReplySds(c,sdsnew("-ERR wrong number of arguments\r\n"));
         resetClient(c);
         return 1;
@@ -1145,6 +846,7 @@ static int processCommand(redisClient *c) {
     /* Exec the command */
     dirty = server.dirty;
     cmd->proc(c);
+	
     if (server.dirty-dirty != 0 && listLength(server.slaves))
         replicationFeedSlaves(server.slaves,cmd,c->db->id,c->argv,c->argc);
     if (listLength(server.monitors))
@@ -1260,7 +962,7 @@ static void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mas
 again:
     if (c->bulklen == -1) {
         /* Read the first line of the query */
-        char *p = strchr(c->querybuf,'\n');
+        char *p = strchr(c->querybuf,'\n');	/* 一个串中查找给定字符的第一个匹配之处 */
         size_t querylen;
         if (p) {
             sds query, *argv;
@@ -1328,25 +1030,21 @@ again:
     }
 }
 
-static int selectDb(redisClient *c, int id) {
-    if (id < 0 || id >= server.dbnum)
-        return REDIS_ERR;
-    c->db = &server.db[id];
-    return REDIS_OK;
-}
-
 static void *dupClientReplyValue(void *o) {
     incrRefCount((robj*)o);
     return 0;
 }
 
 static redisClient *createClient(int fd) {
-    redisClient *c = zmalloc(sizeof(*c));
-
+	/* 虽然整个语句尚未结束，但是右边的c就是左边的c，=号后，左边的c的就被激活了，
+     * 这里和lua编译器处理local var的流程有一点点差异 */
+    redisClient *c = zmalloc(sizeof(*c));	
+	/* 这里有印象即可 */
     anetNonBlock(NULL,fd);
     anetTcpNoDelay(NULL,fd);
+	
     if (!c) return NULL;
-    selectDb(c,0);
+    selectDb(c,0);	/* 设置默认db */
     c->fd = fd;
     c->querybuf = sdsempty();
     c->argc = 0;
@@ -1417,88 +1115,6 @@ static void acceptHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
         return;
     }
     server.stat_numconnections++;
-}
-
-/* ======================= Redis objects implementation ===================== */
-
-static robj *createObject(int type, void *ptr) {
-    robj *o;
-
-    if (listLength(server.objfreelist)) {
-        listNode *head = listFirst(server.objfreelist);
-        o = listNodeValue(head);
-        listDelNode(server.objfreelist,head);
-    } else {
-        o = zmalloc(sizeof(*o));
-    }
-    if (!o) oom("createObject");
-    o->type = type;
-    o->ptr = ptr;
-    o->refcount = 1;
-    return o;
-}
-
-static robj *createStringObject(char *ptr, size_t len) {
-    return createObject(REDIS_STRING,sdsnewlen(ptr,len));
-}
-
-static robj *createListObject(void) {
-    list *l = listCreate();
-
-    if (!l) oom("listCreate");
-    listSetFreeMethod(l,decrRefCount);
-    return createObject(REDIS_LIST,l);
-}
-
-static robj *createSetObject(void) {
-    dict *d = dictCreate(&setDictType,NULL);
-    if (!d) oom("dictCreate");
-    return createObject(REDIS_SET,d);
-}
-
-static void freeStringObject(robj *o) {
-    sdsfree(o->ptr);
-}
-
-static void freeListObject(robj *o) {
-    listRelease((list*) o->ptr);
-}
-
-static void freeSetObject(robj *o) {
-    dictRelease((dict*) o->ptr);
-}
-
-static void freeHashObject(robj *o) {
-    dictRelease((dict*) o->ptr);
-}
-
-static void incrRefCount(robj *o) {
-    o->refcount++;
-#ifdef DEBUG_REFCOUNT
-    if (o->type == REDIS_STRING)
-        printf("Increment '%s'(%p), now is: %d\n",o->ptr,o,o->refcount);
-#endif
-}
-
-static void decrRefCount(void *obj) {
-    robj *o = obj;
-
-#ifdef DEBUG_REFCOUNT
-    if (o->type == REDIS_STRING)
-        printf("Decrement '%s'(%p), now is: %d\n",o->ptr,o,o->refcount-1);
-#endif
-    if (--(o->refcount) == 0) {
-        switch(o->type) {
-        case REDIS_STRING: freeStringObject(o); break;
-        case REDIS_LIST: freeListObject(o); break;
-        case REDIS_SET: freeSetObject(o); break;
-        case REDIS_HASH: freeHashObject(o); break;
-        default: assert(0 != 0); break;
-        }
-        if (listLength(server.objfreelist) > REDIS_OBJFREELIST_MAX ||
-            !listAddNodeHead(server.objfreelist,o))
-            zfree(o);
-    }
 }
 
 /* Try to share an object against the shared objects pool */
@@ -1704,7 +1320,7 @@ static int rdbSaveStringObject(FILE *fp, robj *obj) {
         /* retval == 0 means data can't be compressed, save the old way */
     }
 
-    /* Store verbatim */
+    /* Store verbatim(逐字) */
     if (rdbSaveLen(fp,len) == -1) return -1;
     if (len && fwrite(obj->ptr,len,1,fp) == 0) return -1;
     return 0;
@@ -3472,6 +3088,7 @@ static time_t getExpire(redisDb *db, robj *key) {
     return (time_t) dictGetEntryVal(de);
 }
 
+/* 如果key过期则删除 */
 static int expireIfNeeded(redisDb *db, robj *key) {
     time_t when;
     dictEntry *de;

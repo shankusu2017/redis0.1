@@ -45,7 +45,7 @@ typedef struct aeFileEvent {
     int fd;
     int mask; /* one of AE_(READABLE|WRITABLE|EXCEPTION) */
     aeFileProc *fileProc;
-    aeEventFinalizerProc *finalizerProc;
+    aeEventFinalizerProc *finalizerProc;	/* 析构函数 */
     void *clientData;
     struct aeFileEvent *next;
 } aeFileEvent;

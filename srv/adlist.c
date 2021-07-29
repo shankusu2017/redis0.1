@@ -51,7 +51,7 @@ list *listCreate(void)
     list->dup = NULL;
     list->free = NULL;
     list->match = NULL;
-	/* NOTE: 迭代器没有进行初始化处理 */
+	/* WARN: 没有对迭代器进行初始化处理 */
     return list;
 }
 
@@ -201,8 +201,8 @@ void listRewindTail(list *list) {
  * }
 *
  *
- * 迭代器已经指向了下一个node,故而这里可以删除返回的node
- * */
+ * 迭代器移动到新值，返回其久值
+ */
 listNode *listNext(listIter *iter)
 {
     listNode *current = iter->next;
@@ -217,7 +217,8 @@ listNode *listNext(listIter *iter)
 }
 
 /* List Yield just call listNext() against the list private iterator 
- * 调用此方法前，必须调用RewindXXX系列中的一个，以便初始化list.iter */
+ * 调用此方法前，必须调用RewindXXX系列中的一个，以便初始化list.iter 
+ */
 listNode *listYield(list *list) {
     return listNext(&list->iter);
 }
@@ -244,7 +245,7 @@ list *listDup(list *orig)
     iter = listGetIterator(orig, AL_START_HEAD);
     while((node = listNext(iter)) != NULL) {
         void *value;
-		/* 拷贝原值 */
+		/* 拷贝节点值 */
         if (copy->dup) {
             value = copy->dup(node->value);
             if (value == NULL) {
@@ -255,7 +256,7 @@ list *listDup(list *orig)
         } else {
             value = node->value;
         }	
-		/* 从头往后插入 和AL_START_HEAD相匹配 */
+		/* 插到队尾和AL_START_HEAD相匹配 */
         if (listAddNodeTail(copy, value) == NULL) {
             listRelease(copy);
             listReleaseIterator(iter);

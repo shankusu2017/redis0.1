@@ -86,7 +86,9 @@ void aeDeleteFileEvent(aeEventLoop *eventLoop, int fd, int mask)
 
     fe = eventLoop->fileEventHead;
     while(fe) {
-        if (fe->fd == fd && fe->mask == mask) {	/* fd不是唯一的么，为何还要mask? */
+		/* 同一个fd，不同的事件会被当作不同的event的处理，
+		 * 故而这里既要判断fd,又要判断mask,eg(同一个文件fd的可读，可写) */
+        if (fe->fd == fd && fe->mask == mask) {	
             if (prev == NULL)
                 eventLoop->fileEventHead = fe->next;
             else
@@ -101,6 +103,7 @@ void aeDeleteFileEvent(aeEventLoop *eventLoop, int fd, int mask)
     }
 }
 
+/* 返回当前的时间戳(秒:1485071975)，以及剩余的毫秒(153) */
 static void aeGetTime(long *seconds, long *milliseconds)
 {
     struct timeval tv;
@@ -114,6 +117,7 @@ static void aeAddMillisecondsToNow(long long milliseconds, long *sec, long *ms) 
     long cur_sec, cur_ms, when_sec, when_ms;
 
     aeGetTime(&cur_sec, &cur_ms);
+	
     when_sec = cur_sec + milliseconds/1000;
     when_ms = cur_ms + milliseconds%1000;
     if (when_ms >= 1000) {
@@ -124,9 +128,11 @@ static void aeAddMillisecondsToNow(long long milliseconds, long *sec, long *ms) 
     *ms = when_ms;
 }
 
-long long aeCreateTimeEvent(aeEventLoop *eventLoop, long long milliseconds,
-        aeTimeProc *proc, void *clientData,
-        aeEventFinalizerProc *finalizerProc)
+long long aeCreateTimeEvent(aeEventLoop *eventLoop, 
+								   long long milliseconds,
+							       aeTimeProc *proc,
+							       void *clientData,
+							       aeEventFinalizerProc *finalizerProc)
 {
     long long id = eventLoop->timeEventNextId++;
     aeTimeEvent *te;
@@ -138,8 +144,10 @@ long long aeCreateTimeEvent(aeEventLoop *eventLoop, long long milliseconds,
     te->timeProc = proc;
     te->finalizerProc = finalizerProc;
     te->clientData = clientData;
+	/* 插到列表头 */
     te->next = eventLoop->timeEventHead;
     eventLoop->timeEventHead = te;
+	
     return id;
 }
 
@@ -171,7 +179,7 @@ int aeDeleteTimeEvent(aeEventLoop *eventLoop, long long id)
  * If there are no timers NULL is returned.
  *
  * Note that's O(N) since time events are unsorted. 
- * 注意这里的复杂度是0(N) */
+ * 复杂度是O(N) */
 static aeTimeEvent *aeSearchNearestTimer(aeEventLoop *eventLoop)
 {
     aeTimeEvent *te = eventLoop->timeEventHead;
@@ -196,7 +204,7 @@ static aeTimeEvent *aeSearchNearestTimer(aeEventLoop *eventLoop)
  * if flags has AE_ALL_EVENTS set, all the kind of events are processed.
  * if flags has AE_FILE_EVENTS set, file events are processed.
  * if flags has AE_TIME_EVENTS set, time events are processed.
- * if flags has AE_DONT_WAIT set the function returns ASAP until all
+ * if flags has AE_DONT_WAIT set the function returns ASAP(as soon as possible) until all
  * the events that's possible to process without to wait are processed.
  *
  * The function returns the number of events processed. */
@@ -240,7 +248,7 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
 
         if (flags & AE_TIME_EVENTS && !(flags & AE_DONT_WAIT))
             shortest = aeSearchNearestTimer(eventLoop);
-        if (shortest) {
+        if (shortest) {	/* 等到这个时间事件到期 */
             long now_sec, now_ms;
 
             /* Calculate the time missing for the nearest
@@ -270,7 +278,10 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
 		/* tvp:传入参数，设置select阻塞的时间。
 		 * 若设置为NULL，则select一直阻塞直到有事件发生； 
 		 * 若设置为0，则select为非阻塞模式，执行后立即返回；
-		 * 若设置为一个大于0的数，即select的阻塞时间，若阻塞时间内有事件发生就返回，否则时间到了立即返回 */
+		 * 若设置为一个大于0的数，即select的阻塞时间，若阻塞时间内有事件发生就返回，否则时间到了立即返回
+		 * 
+		 * 这里巧妙的处理了时间事件的等待超时逻辑
+		 */
         retval = select(maxfd+1, &rfds, &wfds, &efds, tvp);
         if (retval > 0) {
             fe = eventLoop->fileEventHead;

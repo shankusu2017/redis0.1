@@ -42,11 +42,11 @@ static void sdsOomAbort(void) {
 }
 
 /* 
-** KEYCODE 按照指定的字符串长度申请一个sds
-** 
-** 不会预留多余的free
-** NOTE: initlen可以为0
-*/
+ * KEYCODE 按照指定的字符串长度申请一个sds
+ * 
+ * 不会预留多余的free
+ * NOTE: initlen可以为0
+ */
 sds sdsnewlen(const void *init, size_t initlen) {
     struct sdshdr *sh;
 
@@ -57,11 +57,11 @@ sds sdsnewlen(const void *init, size_t initlen) {
 #else
     if (sh == NULL) return NULL;
 #endif
-    sh->len = initlen;	/* 这里不包含下面自动添加的\0,做到对调用层的透明 */
+    sh->len = initlen;	/* 这里不包含下面自动添加的\0,做到上层的透明 */
     sh->free = 0;
     if (initlen) {
         if (init) 
-			memcpy(sh->buf, init, initlen);
+			memcpy(sh->buf, init, initlen);	/* NOTE: 这里不是strcpy而是memcpy */
         else 
 			memset(sh->buf,0,initlen);
     }
@@ -70,6 +70,7 @@ sds sdsnewlen(const void *init, size_t initlen) {
 }
 
 sds sdsempty(void) {
+	/* 这里还不如 sdsnewlen(NULL, 0) 来的更为清楚 */
     return sdsnewlen("",0);
 }
 
@@ -81,7 +82,7 @@ sds sdsnew(const char *init) {
 
 /* 存储的数据长度 */
 size_t sdslen(const sds s) {
-	/* 这里提取sdshdr的方法可以整理成一个宏定义 */
+	/* 这里提取sdshdr的方法可以整理成一个宏定义,后面蛮多地方都用到了 */
     struct sdshdr *sh = (void*) (s-(sizeof(struct sdshdr)));
     return sh->len;
 }

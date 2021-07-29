@@ -35,26 +35,28 @@
 
 typedef char *sds;
 
-/* context : str = "hello"
-** len  = 5
-** free = 5
-** 整个byte.space=5+1+5   自动多一个字节出来用于保存'\0'
-*/
+/* 
+ * context : str = "hello"
+ * len  = 5
+ * free = 5
+ * 整个byte.space=5+1+5   自动多一个字节出来用于保存'\0'
+ * buf放在结构体的最后，这个设计是故意的，其它的函数对此有依赖，不能随意改动
+ */
 struct sdshdr {
-    long len;
+    long len;		/* 已使用的空间长度（不包含'\0' */
     long free;		/* 空间预分配，惰性释放 */
     char buf[]; 	/* 字节空间的首地址 */
 };
 
-/* 构建指定长度的sds */
+/* 构建包含指定长度数据的sds(数据内部可以有'\0') */
 sds sdsnewlen(const void *init, size_t initlen);
-/* */
+/* 构建指定数据的sds(数据内部不得有'\0') */
 sds sdsnew(const char *init);
 /* 构建一个"空字符串"的sds */
 sds sdsempty();
 /* 存储的数据长度(不包含自动添加的\0) */
 size_t sdslen(const sds s);
-/* 复制一份sds */
+/* 复制sds */
 sds sdsdup(const sds s);
 /* 释放sds */
 void sdsfree(sds s);

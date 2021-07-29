@@ -42,7 +42,7 @@ typedef struct listNode {
 /* 迭代器 */
 typedef struct listIter {
     listNode *next;
-    int direction;	/* 迭代的方向 */
+    int direction;	/* 迭代的方向(从头到尾，还是从尾到头) */
 } listIter;
 
 /* 双向链表，无环 */
@@ -53,7 +53,7 @@ typedef struct list {
     void (*free)(void *ptr);
     int (*match)(void *ptr, void *key);
     unsigned int len;	/* 元素数量 */
-    listIter iter;		/* 跟一个迭代器实体，要用到的时候直接初始化后即可使用 */
+    listIter iter;		/* 迭代器实体，非指针，要用时直接初始化后即可 */
 } list;
 
 /* Functions implemented as macros */

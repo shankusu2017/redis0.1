@@ -34,8 +34,7 @@
 static size_t used_memory = 0;
 
 /* 申请内存, 自带size.head
-** mem: size.head + free.mem
-*/
+ * mem: size.head + free.mem */
 void *zmalloc(size_t size) {
 	/* The  malloc()  function  allocates  size bytes and returns a pointer to the allocated memory.  
 	 * The memory is not initialized */

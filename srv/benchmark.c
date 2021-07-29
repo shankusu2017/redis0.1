@@ -132,7 +132,7 @@ static void freeAllClients(void) {
 static void resetClient(client c) {
     aeDeleteFileEvent(config.el,c->fd,AE_WRITABLE);
     aeDeleteFileEvent(config.el,c->fd,AE_READABLE);
-    aeCreateFileEvent(config.el,c->fd, AE_WRITABLE,writeHandler,c,NULL);
+    aeCreateFileEvent(config.el,c->fd,AE_WRITABLE,writeHandler,c,NULL);
     sdsfree(c->ibuf);
     c->ibuf = sdsempty();
     c->readlen = (c->replytype == REPLY_BULK) ? -1 : 0;
