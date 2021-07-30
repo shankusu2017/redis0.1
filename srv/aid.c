@@ -532,3 +532,69 @@ void createSharedObjects(void) {
     shared.select9 = createStringObject("select 9\r\n",10);
 }
 
+robj *lookupKey(redisDb *db, robj *key) {
+    dictEntry *de = dictFind(db->dict,key);
+    return de ? dictGetEntryVal(de) : NULL;
+}
+
+robj *lookupKeyRead(redisDb *db, robj *key) {
+    expireIfNeeded(db,key);
+    return lookupKey(db,key);
+}
+
+robj *lookupKeyWrite(redisDb *db, robj *key) {
+    deleteIfVolatile(db,key);
+    return lookupKey(db,key);
+}
+
+/* 如果key过期则删除 */
+int expireIfNeeded(redisDb *db, robj *key) {
+    time_t when;
+    dictEntry *de;
+
+    /* No expire? return ASAP */
+    if (dictSize(db->expires) == 0 ||
+       (de = dictFind(db->expires,key)) == NULL) return 0;
+
+    /* Lookup the expire */
+    when = (time_t) dictGetEntryVal(de);
+    if (time(NULL) <= when) return 0;
+
+    /* Delete the key */
+    dictDelete(db->expires,key);
+    return dictDelete(db->dict,key) == DICT_OK;
+}
+
+int deleteIfVolatile(redisDb *db, robj *key) {
+    dictEntry *de;
+
+    /* No expire? return ASAP */
+    if (dictSize(db->expires) == 0 ||
+       (de = dictFind(db->expires,key)) == NULL) return 0;
+
+    /* Delete the key */
+    server.dirty++;
+    dictDelete(db->expires,key);
+    return dictDelete(db->dict,key) == DICT_OK;
+}
+
+int deleteKey(redisDb *db, robj *key) {
+    int retval;
+
+    /* We need to protect key from destruction: after the first dictDelete()
+     * it may happen that 'key' is no longer valid if we don't increment
+     * it's count. This may happen when we get the object reference directly
+     * from the hash table with dictRandomKey() or dict iterators 
+     * 这里的注释不是太明白 */
+    incrRefCount(key);
+	
+    if (dictSize(db->expires))
+		dictDelete(db->expires,key);
+	
+    retval = dictDelete(db->dict,key);
+    decrRefCount(key);
+
+    return retval == DICT_OK;
+}
+
+

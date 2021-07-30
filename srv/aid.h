@@ -38,5 +38,13 @@ int dictSdsKeyCompare(void *privdata, const void *key1,
 				const void *key2);
 unsigned int dictSdsHash(const void *key);
 void createSharedObjects(void);
+robj *lookupKey(redisDb *db, robj *key);
+robj *lookupKeyRead(redisDb *db, robj *key);
+robj *lookupKeyWrite(redisDb *db, robj *key);
+int expireIfNeeded(redisDb *db, robj *key);
+int deleteIfVolatile(redisDb *db, robj *key);
+int deleteKey(redisDb *db, robj *key);
+
+
 
 #endif
