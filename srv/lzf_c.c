@@ -89,8 +89,8 @@
 /*
  * compressed format
  *
- * 000LLLLL <L+1>    ; literal
- * LLLooooo oooooooo ; backref L
+ * 000LLLLL <L+1>    ; literal(文字)
+ * LLLooooo oooooooo ; backref(引用) L
  * 111ooooo LLLLLLLL oooooooo ; backref L+7
  *
  */
